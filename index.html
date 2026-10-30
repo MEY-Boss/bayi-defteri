@@ -85,6 +85,9 @@ html,body{overflow-x:hidden}
 .cip small{color:var(--muted);margin-left:4px}
 .cip.on{background:var(--brand);border-color:var(--brand);color:#fff}
 #mcips{margin-top:6px}#mcips .cip{font-size:13px;padding:5px 11px;background:var(--brand2);border-color:transparent}#mcips .cip.on{background:var(--brand)}.cip.on small{color:inherit;opacity:.8}
+#sepetBar{position:fixed;left:12px;right:12px;bottom:calc(62px + env(safe-area-inset-bottom));z-index:7;max-width:696px;margin:0 auto}
+#sepetBar .b{margin:0;box-shadow:0 4px 16px rgba(0,0,0,.25);background:var(--ok)}
+body.sepetli main{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
 .yuk{display:flex;align-items:center;gap:10px;padding:14px;background:var(--brand2);border-radius:10px;margin-top:10px}
 </style>
 </head>
@@ -113,7 +116,7 @@ function load(){
 }
 function normalize(){
   const d = BOS(); db.settings = Object.assign(d.settings, db.settings||{}); db.settings.kom = Object.assign(d.settings.kom, db.settings.kom||{}); db.settings.taksit = Object.assign(d.settings.taksit, db.settings.taksit||{});
-  db.products ||= []; db.units ||= []; db.listeler ||= []; db.katalog ||= {}; db.kampanyalar ||= [];
+  db.products ||= []; db.units ||= []; db.listeler ||= []; db.katalog ||= {}; db.kampanyalar ||= []; db.sepet ||= [];
   /* 30.10: stok dökümünden "Küçük ev aleti" diye girilmiş buzdolabı vb. kategorileri düzelt */
   db.products.forEach(p=>{ if (p.kategori==="Küçük ev aleti") { const k = db.katalog[normModel(p.model)]?.kategori || listeKategori(p.ad||""); if (k && k!=="Küçük ev aleti") p.kategori = k; } });
   if ((db.v||1) < 2) { // v1: KDV hariç tutuluyordu → KDV dahile çevir
@@ -197,7 +200,7 @@ const main = $("#main");
 let tab = "fiyat", durum = { q:"", pid:null, marj:null, odeme:"kart" };
 const BASLIK = { fiyat:"Fiyat Ver", stok:"Stok", giris:"Ürün Girişi", kar:"Kâr", diger:"Diğer" };
 function go(t){ tab=t; $("#title").textContent=BASLIK[t]; document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t)); render(); window.scrollTo(0,0); }
-function render(){ ({fiyat:vFiyat, stok:vStok, giris:vGiris, kar:vKar, diger:vDiger})[tab](); }
+function render(){ ({fiyat:vFiyat, stok:vStok, giris:vGiris, kar:vKar, diger:vDiger})[tab](); sepetBar(); }
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.t));
 const aramaKutusu = ph => `<input id="q" type="search" placeholder="${ph}" value="${esc(durum.q)}" autocomplete="off">`;
 function aramaBagla(cb){ const q=$("#q"); q.oninput=()=>{ durum.q=q.value; cb(); }; }
@@ -262,13 +265,14 @@ function vFiyat(){
           <div class="res"><div class="muted">Önerilen satış fiyatı (%${durum.marj} kâr, prim hariç)</div><div class="big">${TL(o)}</div></div>
           ${farkKutu(p, u, kom)}
           <div class="res neg"><div class="row sp"><span class="muted">Zarar sınırı · primsiz</span><b>${TL(z)}</b></div><div class="row sp"><span class="muted">Zarar sınırı · prim düşünce</span><b>${TL(zp)}</b></div></div>
-          <button class="b" data-sat="${u.id}" data-f="${o}">${g.length>1?"Bunlardan 1 adet sat":"Bu cihazı sat"}</button>
+          <div class="row"><button class="b" data-sat="${u.id}" data-f="${o}">${g.length>1?"1 adet sat":"Sat"}</button><button class="b" style="background:var(--okbg);color:var(--ok)" data-sepet="${g.map(x=>x.id).join(",")}" data-f="${o}">Sepete ekle${(()=>{ const n = sepet().filter(x=>g.some(y=>y.id===x.id)).length; return n ? " ("+n+")" : ""; })()}</button></div>
         </div>`;}).join("") : `<div class="empty">Bu üründen stokta cihaz kalmamış.</div>`}`;
     $("#geri").onclick=()=>{ durum.pid=null; vFiyat(); };
     $("#marj").onchange=e=>{ durum.marj=num(e.target.value); detay(p); };
     $("#od").onchange=e=>{ durum.odeme=e.target.value; detay(p); };
     el.querySelectorAll("[data-sat]").forEach(b=>b.onclick=()=>satisFormu(b.dataset.sat, +b.dataset.f));
     el.querySelectorAll("[data-kmp]").forEach(b=>b.onclick=()=>kampanyaSatis(b.dataset.kmp, b.dataset.u));
+    el.querySelectorAll("[data-sepet]").forEach(b=>b.onclick=()=>sepeteEkle(b.dataset.sepet.split(","), +b.dataset.f));
     if (st.length) taksitCiz($("#taksitAlan"), p, fiyatIcin(maliyet(st[0]), durum.marj, s.kom.nakit||0));
   }
 }
@@ -744,7 +748,7 @@ async function satisOku(f){
   $("#sTip").querySelectorAll("button").forEach(b=>b.onclick=()=>{ tip=b.dataset.v; $("#sTip").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); on(); });
   const hazirla = () => {
     const e={}; document.querySelectorAll("[data-es]").forEach(x=>e[x.dataset.es]=+x.value);
-    const g=(r,k)=>e[k]>=0?r[e[k]]:"", alinan=new Set(), es_=[], eslesmedi=[], zaten=[];
+    const g=(r,k)=>e[k]>=0?r[e[k]]:"", alinan=new Set(), es_=[], eslesmedi=[], zaten=[], bagla=[];
     const once = new Set(db.units.filter(u=>u.satis&&u.satis.kaynak).map(u=>u.satis.kaynak));
     veri.forEach((r,i)=>{
       const model=String(g(r,"model")).trim(), seri=String(g(r,"seri")).trim(); if(!model&&!seri) return;
@@ -753,6 +757,9 @@ async function satisOku(f){
       for (let k=0;k<adet;k++){
         const kaynak=[belge||tarih,normModel(model),seri,k].join("|");
         if (once.has(kaynak)) { zaten.push(model||seri); continue; }
+        /* Önce: aynı gün uygulamada (tek satış / sepet) yapılmış satış varsa ona bağla, iki kez sayma */
+        const app = db.units.find(x=>x.satis && !x.satis.kaynak && !alinan.has(x.id) && x.satis.tarih===tarih && (seri ? x.seri===seri : normModel(P(x.pid)?.model)===normModel(model)));
+        if (app) { alinan.add(app.id); bagla.push({ u:app, kaynak }); zaten.push(model||seri); continue; }
         let u = seri && db.units.find(x=>!x.satis && !alinan.has(x.id) && x.seri===seri);
         if (!u && model) u = db.units.filter(x=>!x.satis && !alinan.has(x.id) && normModel(P(x.pid)?.model)===normModel(model)).sort((a,b)=>a.gTarih.localeCompare(b.gTarih))[0];
         if (!u) { eslesmedi.push(`${model||"—"}${seri?" ("+seri+")":""}`); continue; }
@@ -765,16 +772,17 @@ async function satisOku(f){
     /* Aynı fişteki cihazlar bir kampanyaya uyuyorsa öner */
     const fis = {}; es_.forEach(x=>{ const b=x.satis.not; if (b && b!=="Diva") (fis[b] ||= []).push(x); });
     const oneri = []; Object.entries(fis).forEach(([b,xs])=>{ if (xs.length<2) return; const k = aktifKampanyalar().find(k=>kampanyaUyar(k, xs.map(x=>x.u))); if (k) oneri.push({ belge:b.replace(/^Diva /,""), k, xs }); });
-    return { es:es_, eslesmedi, zaten, oneri };
+    return { es:es_, eslesmedi, zaten, oneri, bagla };
   };
   const on = () => { const h=hazirla(), kar=h.es.reduce((a,x)=>a+satisHesap(x.u,x.satis).kar,0);
-    $("#sOn").innerHTML=`<div class="res"><b>${h.es.length} satış</b> stoktaki cihazla eşleşti · toplam kâr ${TL(kar)}${h.zaten.length?`<br><span class="muted">${h.zaten.length} satır daha önce yüklenmiş, atlanacak</span>`:""}</div>
+    $("#sOn").innerHTML=`<div class="res"><b>${h.es.length} satış</b> stoktaki cihazla eşleşti · toplam kâr ${TL(kar)}${h.zaten.length?`<br><span class="muted">${h.zaten.length} satır daha önce yüklenmiş ya da uygulamada satılmış, atlanacak</span>`:""}</div>
       ${h.es.some(x=>x.satis.fark)?`<div class="res" style="background:var(--okbg)">${h.es.filter(x=>x.satis.fark).length} satışa Profilo fiyat farkı eklenecek: +${TL(h.es.reduce((a,x)=>a+(x.satis.fark||0),0))}</div>`:""}
       ${h.oneri.length?`<div class="res" style="background:var(--brand2)"><b>${h.oneri.length} fiş kampanyaya uyuyor</b> — işaretlenenlere bayi primi eklenir:${h.oneri.map((o,i)=>`<label style="display:flex;gap:8px;align-items:center;margin:6px 0 0"><input type="checkbox" data-oneri="${i}" checked style="width:auto"> Fiş ${esc(o.belge)}: ${esc(o.k.ad)} · ${o.xs.map(x=>esc(P(x.u.pid).model)).join(" + ")} · +${TL(o.k.prim)}</label>`).join("")}</div>`:""}
       ${h.eslesmedi.length?`<div class="res neg"><b>${h.eslesmedi.length} satır eşleşmedi</b> (stokta yok ya da model kodu farklı):<br><span class="muted">${esc(h.eslesmedi.slice(0,15).join(", "))}${h.eslesmedi.length>15?" …":""}</span></div>`:""}`; };
   document.querySelectorAll("[data-es]").forEach(x=>x.onchange=on); on();
-  $("#sKay").onclick=()=>{ const h=hazirla(); if(!h.es.length) return alert("Eşleşen satış yok.");
+  $("#sKay").onclick=()=>{ const h=hazirla(); if(!h.es.length && !h.bagla.length) return alert("Eşleşen satış yok.");
     let km = 0; h.oneri.forEach((o,i)=>{ const c=document.querySelector(`[data-oneri="${i}"]`); if (c && !c.checked) return; o.xs.forEach(x=>{ x.satis.kampanya = { id:o.k.id, ad:o.k.ad, prim:r2(o.k.prim/o.xs.length) }; }); km++; });
+    h.bagla.forEach(b=>b.u.satis.kaynak=b.kaynak); // uygulamadaki satış Diva satırına bağlanır; tekrar yüklemede de atlanır
     h.es.forEach(x=>x.u.satis=x.satis); save(); sheetKapat(); toast(`${h.es.length} satış kaydedildi${km?` · ${km} kampanya`:""}`); go("kar"); };
 }
 
@@ -1235,6 +1243,100 @@ function satisFormu(uidSec, fiyat){
     u.satis = { tarih:o.tarih, tutar:h.tutar, odeme:o.odeme, komOran:o.komOran, kom:h.kom, gider:h.gider, musteri:o.musteri, not:o.not, fark:h.fark, aile:h.aile, ...(tk?{ taksit:tk }:{}) };
     durum.odeme = o.odeme; save(); sheetKapat(); durum.pid = stoktaki(p.id).length ? p.id : null; toast("Satış kaydedildi · kâr "+TL(h.kar)); render();
   };
+}
+
+/* ---------- Sepet: aynı müşteriye birden çok ürün; kampanyaya uyanlar kendiliğinden gruplanır ---------- */
+const sepet = () => (db.sepet ||= []); // [{ id: cihaz id, fiyat }]
+function sepetTemizle(){ db.sepet = sepet().filter(x=>{ const u = db.units.find(y=>y.id===x.id); return u && !u.satis; }); }
+function sepeteEkle(ids, fiyat){
+  const ici = new Set(sepet().map(x=>x.id)), id = ids.find(i=>!ici.has(i) && !db.units.find(u=>u.id===i)?.satis);
+  if (!id) return toast("Bu üründen stoktaki bütün cihazlar zaten sepette");
+  sepet().push({ id, fiyat:r2(fiyat) }); save(); toast(`Sepete eklendi · ${sepet().length} ürün`); render();
+}
+function sepetBar(){
+  sepetTemizle(); let el = $("#sepetBar"); if (!el) { el = document.createElement("div"); el.id = "sepetBar"; document.body.appendChild(el); }
+  const n = sepet().length; document.body.classList.toggle("sepetli", !!n);
+  el.innerHTML = n ? `<button class="b" id="sepetAc">🛒 Sepet · ${n} ürün · ${TL(sepet().reduce((a,x)=>a+num(x.fiyat),0))}</button>` : "";
+  if (n) $("#sepetAc").onclick = sepetAc;
+}
+/* l içinden boyu min–max arası, ok() sağlayan ilk alt küme (büyükten küçüğe) */
+function altKume(l, min, max, ok){
+  const n = l.length;
+  for (let boy=Math.min(max,n); boy>=min && boy>0; boy--){
+    const ix = [...Array(boy).keys()];
+    for (;;) { const s = ix.map(i=>l[i]); if (ok(s)) return s;
+      let i = boy-1; while (i>=0 && ix[i]===n-boy+i) i--; if (i<0) break; ix[i]++; for (let j=i+1;j<boy;j++) ix[j]=ix[j-1]+1; }
+  }
+  return null;
+}
+/* Önce primi en yüksek kampanya; bir cihaz yalnız bir kampanyaya girer */
+function sepetKampanyalari(us){
+  const kalan = [...us], sonuc = [], kmp = [...aktifKampanyalar()].sort((a,b)=>b.prim-a.prim);
+  for (let bulundu=true; bulundu; ) { bulundu = false;
+    for (const k of kmp) {
+      const min = k.gruplar.reduce((a,g)=>a+g.adet,0), max = k.gruplar.reduce((a,g)=>a+(g.enFazla||g.adet),0);
+      const alt = altKume(kalan, min, max, s=>kampanyaUyar(k,s));
+      if (alt) { sonuc.push({ k, us:alt }); alt.forEach(u=>kalan.splice(kalan.indexOf(u),1)); bulundu = true; break; }
+    } }
+  return sonuc;
+}
+function sepetAc(){
+  const s = db.settings, st = { odeme:durum.odeme, bid:varsayilanBanka().id, n:"", kom:s.kom[durum.odeme]||0, kapali:new Set(), aile:new Set(), tarih:today(), musteri:"", gider:"", not:"" };
+  const ciz = () => {
+    sepetTemizle(); const kal = sepet(), us = kal.map(x=>db.units.find(u=>u.id===x.id)), fiyat = Object.fromEntries(kal.map(x=>[x.id, x.fiyat]));
+    if (!us.length) { sheetKapat(); render(); return toast("Sepet boş"); }
+    const oneri = sepetKampanyalari(us), payi = {}, kmpAd = {};
+    oneri.forEach((o,i)=>{ if (st.kapali.has(o.k.id+"|"+o.us.map(u=>u.id).join(","))) return; o.us.forEach(u=>{ payi[u.id] = r2(o.k.prim/o.us.length); kmpAd[u.id] = o.k; }); });
+    const topFiyat = us.reduce((a,u)=>a+num(fiyat[u.id]),0), gider = num(st.gider);
+    const H = us.map(u=>{ const f = farkBilgi(P(u.pid).model, st.tarih);
+      return [u, satisHesap(u, { tutar:fiyat[u.id], komOran:st.kom, gider: topFiyat ? r2(gider*num(fiyat[u.id])/topFiyat) : 0, kampPrim:payi[u.id]||0, fark: f&&f.icinde ? f.tutar : 0, aile: st.aile.has(u.id) ? aileFark(P(u.pid).model) : 0 })]; });
+    const T = k => r2(H.reduce((a,[,h])=>a+h[k],0)), B = bankaBul(st.bid), ns = taksitSayilari(B);
+    sheet(`<div class="row sp"><h2 style="margin:0">🛒 Sepet · ${us.length} ürün</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+      ${H.map(([u,h])=>{ const p = P(u.pid), a = aileFark(p.model); return `<div class="satir">
+        <div class="row sp"><b>${esc(pAd(p))}</b><button class="mini" data-sc="${u.id}" style="flex:0 0 auto">Çıkar</button></div>
+        <div class="muted">Maliyet ${TL(maliyet(u))}${u.seri?" · seri "+esc(u.seri):""}${kmpAd[u.id]?` · <span class="pos">${esc(kmpAd[u.id].ad)} +${TL(payi[u.id])}</span>`:""}${h.fark?` · <span class="pos">fiyat farkı +${TL(h.fark)}</span>`:""}</div>
+        <div class="row"><div><label>Satış fiyatı (KDV dahil)</label><input data-sf="${u.id}" inputmode="decimal" value="${virgul(fiyat[u.id])}"></div><div style="flex:0 0 auto;text-align:right"><label>Kâr</label><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b></div></div>
+        ${a?`<label style="display:flex;gap:8px;align-items:center;margin:4px 0 0"><input type="checkbox" data-aile="${u.id}" ${st.aile.has(u.id)?"checked":""} style="width:auto"> Aile Bakanlığı +${TL(a)}</label>`:""}</div>`; }).join("")}
+      ${oneri.length?`<div class="res" style="background:var(--okbg)"><b>Kampanyalar</b>${oneri.map(o=>{ const key = o.k.id+"|"+o.us.map(u=>u.id).join(","); return `<label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" data-kp="${esc(key)}" ${st.kapali.has(key)?"":"checked"} style="width:auto"> ${esc(o.k.ad)}: ${o.us.map(u=>esc(P(u.pid).model)).join(" + ")} · +${TL(o.k.prim)}</label>`; }).join("")}
+        ${us.length>oneri.reduce((a,o)=>a+o.us.length,0)?`<div class="muted" style="margin-top:4px">Diğer ürünler kampanyasız satılır.</div>`:""}</div>`
+        : aktifKampanyalar().length ? `<div class="muted" style="margin-top:8px">Sepetteki ürünler bir kampanya oluşturmuyor.</div>` : ""}
+      <div class="row"><div><label>Ödeme</label><select id="spOd">${odemeOps(st.odeme)}</select></div><div style="flex:0 0 100px"><label>Komisyon %</label><input id="spKom" inputmode="decimal" value="${virgul(st.kom)}"></div></div>
+      ${st.odeme==="taksit"?`<div class="row"><div><label>Banka / kredi</label><select id="spBanka">${bankaOps(st.bid)}</select></div><div style="flex:0 0 110px"><label>Taksit</label><select id="spN">${ns.map(n=>`<option value="${n}"${String(n)===String(st.n)?" selected":""}>${n} ${B.tur==="kredi"?"ay":"taksit"}</option>`).join("")}</select></div></div>`:""}
+      <div class="row"><div><label>Tarih</label><input id="spTar" type="date" value="${st.tarih}"></div><div><label>Müşteri</label><input id="spMus" value="${esc(st.musteri)}"></div></div>
+      <div class="row"><div><label>Ek gider (montaj, nakliye) ₺</label><input id="spGider" inputmode="decimal" value="${esc(st.gider)}" placeholder="0"></div><div><label>Not</label><input id="spNot" value="${esc(st.not)}"></div></div>
+      <div class="res ${T("kar")<0?"neg":""}"><div class="row sp"><span>Toplam satış</span><b>${TL(T("tutar"))}</b></div><div class="row sp"><span>Maliyet</span><b>−${TL(T("maliyet"))}</b></div><div class="row sp"><span>Komisyon + ek gider</span><b>−${TL(T("kom")+T("gider"))}</b></div>
+        ${T("kampPrim")?`<div class="row sp"><span>Kampanya primleri</span><b>+${TL(T("kampPrim"))}</b></div>`:""}${T("fark")+T("aile")?`<div class="row sp"><span>Fiyat farkları</span><b>+${TL(T("fark")+T("aile"))}</b></div>`:""}
+        <div class="row sp" style="margin-top:4px"><span class="big">Toplam kâr</span><span class="big ${T("kar")<0?"neg":"pos"}">${TL(T("kar"))}</span></div></div>
+      <button class="b" id="spKay">Satışı tamamla</button>
+      <div class="row" style="margin-top:8px"><button class="b2" id="spTeklif">Teklif gönder</button><button class="b2 red" id="spBos">Sepeti boşalt</button></div>`);
+    const oku = () => { st.tarih=$("#spTar").value||today(); st.musteri=$("#spMus").value; st.gider=$("#spGider").value; st.not=$("#spNot").value; };
+    $("#kapat").onclick=()=>{ oku(); sheetKapat(); render(); };
+    document.querySelectorAll("[data-sf]").forEach(i=>i.onchange=()=>{ const x = sepet().find(y=>y.id===i.dataset.sf); x.fiyat = r2(num(i.value)); save(); oku(); ciz(); });
+    document.querySelectorAll("[data-sc]").forEach(b=>b.onclick=()=>{ db.sepet = sepet().filter(x=>x.id!==b.dataset.sc); save(); oku(); ciz(); });
+    document.querySelectorAll("[data-kp]").forEach(c=>c.onchange=()=>{ c.checked ? st.kapali.delete(c.dataset.kp) : st.kapali.add(c.dataset.kp); oku(); ciz(); });
+    document.querySelectorAll("[data-aile]").forEach(c=>c.onchange=()=>{ c.checked ? st.aile.add(c.dataset.aile) : st.aile.delete(c.dataset.aile); oku(); ciz(); });
+    $("#spOd").onchange=e=>{ st.odeme=e.target.value; st.kom = s.kom[st.odeme]||0; if (st.odeme==="taksit") { const n = taksitSayilari(bankaBul(st.bid))[0]; st.n = n||""; if (n) st.kom = bankaBul(st.bid).oran[n]; } oku(); ciz(); };
+    $("#spKom").onchange=e=>{ st.kom=num(e.target.value); oku(); ciz(); };
+    if ($("#spBanka")) { $("#spBanka").onchange=e=>{ st.bid=e.target.value; const n = taksitSayilari(bankaBul(st.bid))[0]; st.n = n||""; st.kom = n ? bankaBul(st.bid).oran[n] : 0; oku(); ciz(); };
+      $("#spN").onchange=e=>{ st.n=e.target.value; st.kom = bankaBul(st.bid).oran[st.n]; oku(); ciz(); }; }
+    ["#spTar","#spGider"].forEach(i=>$(i).onchange=()=>{ oku(); ciz(); });
+    $("#spBos").onclick=()=>{ if (!confirm("Sepet boşaltılsın mı? (Ürünler stokta kalır)")) return; db.sepet=[]; save(); sheetKapat(); render(); };
+    $("#spTeklif").onclick=async()=>{ oku();
+      const P0 = T("tutar"), satir = H.map(([u])=>{ const p=P(u.pid); return `• ${[p.marka,p.model].filter(Boolean).join(" ")}: ${TL(fiyat[u.id])}`; });
+      const tk = taksitSayilari(B).filter(n=>!(B.tur==="kart" && us.some(u=>P(u.pid).kategori==="Televizyon") && P0>5000 && n>4));
+      const metin = [`${s.firma||""} · Fiyat teklifi (${trDate(today())})`, st.musteri?`Sayın ${st.musteri}`:null, "", ...satir, "", `Peşin toplam: ${TL(P0)}`,
+        ...tk.map(n=>{ const t=taksitFiyat(P0,n,B); return `${n} ${B.tur==="kredi"?"ay":"taksit"}: ${n} × ${TL(t/n)} = ${TL(t)}`; }), "", "Fiyatlara KDV dahildir."].filter(x=>x!==null).join("\n");
+      try { if (navigator.share) await navigator.share({ text:metin }); else { await navigator.clipboard.writeText(metin); toast("Teklif metni kopyalandı"); } }
+      catch(e){ if (e && e.name!=="AbortError") { try { await navigator.clipboard.writeText(metin); toast("Teklif metni kopyalandı"); } catch(_) { alert(metin); } } } };
+    $("#spKay").onclick=()=>{ oku();
+      if (H.some(([u])=>!num(fiyat[u.id]) && !(kmpAd[u.id] && kmpAd[u.id].gruplar.some(g=>/hediye/i.test(g.ad) && grupUyar(g,u))))) return alert("Her ürünün satış fiyatını yazın (kampanyadaki hediye ürün 0 olabilir).");
+      const sid = uid(), tk = st.odeme==="taksit" && st.n ? { banka:B.ad, n:+st.n } : null;
+      H.forEach(([u,h])=>{ u.satis = { tarih:st.tarih, tutar:h.tutar, odeme:st.odeme, komOran:st.kom, kom:h.kom, gider:h.gider, musteri:st.musteri.trim(), not:[st.not.trim(), `Sepet (${us.length} ürün)`].filter(Boolean).join(" · "), sepet:sid,
+        fark:h.fark, aile:h.aile, ...(kmpAd[u.id]?{ kampanya:{ id:kmpAd[u.id].id, ad:kmpAd[u.id].ad, prim:payi[u.id] } }:{}), ...(tk?{ taksit:tk }:{}) }; });
+      db.sepet = []; durum.odeme = st.odeme; durum.pid = null; save(); sheetKapat(); toast(`${us.length} ürün satıldı · kâr ${TL(T("kar"))}`); render(); };
+  };
+  if (st.odeme==="taksit") { const n = taksitSayilari(bankaBul(st.bid))[0]; st.n = n||""; if (n) st.kom = bankaBul(st.bid).oran[n]; }
+  ciz();
 }
 
 /* Alt pencere */
