@@ -167,7 +167,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v21 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v22 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
@@ -629,7 +629,7 @@ function vKar(){
   const kat = {}; H.forEach(([u,h])=>{ const k=(P(u.pid)?.kategori)||"Diğer"; kat[k] ||= {n:0,kar:0,karP:0}; kat[k].n++; if (u.alis) { kat[k].kar+=h.kar; kat[k].karP+=h.karPrimli; } });
   const yil = today().slice(0,4), alimYil = db.units.filter(u=>u.gTarih.startsWith(yil)), primYil = r2(alimYil.reduce((a,u)=>a+primTutar(u),0)), alimTop = r2(alimYil.reduce((a,u)=>a+u.alis,0));
   const ayAd = a => a==="hepsi" ? "Tümü" : new Date(a+"-01").toLocaleDateString("tr-TR",{month:"long",year:"numeric"});
-  main.innerHTML = `<button class="b2" id="defterXls" style="width:100%;margin-bottom:10px">📒 Satış defterini Excel’e aktar</button>
+  main.innerHTML = faturaKontrolKart() + `<button class="b2" id="defterXls" style="width:100%;margin-bottom:10px">📒 Satış defterini Excel’e aktar</button>
     ${bilinmeyen?`<div class="card" style="background:var(--warnbg)"><b>${bilinmeyen} satışın maliyeti bilinmiyor</b><div class="muted">Bunlar ciroya girer, kâra girmez (stoksuz satışlar).</div></div>`:""}
     <select id="ay">${["hepsi",...aylar].map(a=>`<option value="${a}"${a===durum.ay?" selected":""}>${ayAd(a)}</option>`).join("")}</select>
     <div class="stat" style="margin-top:10px">
@@ -648,7 +648,7 @@ function vKar(){
     ${sat.length?`<div class="card list">${H.map(([u,h])=>`<div class="it tap" data-p="${u.pid}"><div class="row sp"><div><b>${esc(pAd(P(u.pid)))}</b><div class="muted">${trDate(u.satis.tarih)} · seri ${esc(u.seri||"—")} · ${ODEME[u.satis.odeme]||""}</div></div><div class="sag">${u.alis?`<b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b>`:'<span class="muted">maliyet yok</span>'}<div class="muted">${TL(u.satis.tutar)}</div></div></div></div>`).join("")}</div>`:`<div class="empty">Bu dönemde satış yok.</div>`}
     <div class="muted" style="margin-top:8px">Tüm tutarlar KDV dahil. Kâr = satış − maliyet − komisyon − ek gider + kampanya primi + fiyat farkı. Primli kâr, cihazın yıl sonu primini de ekler.</div>`;
   $("#ay").onchange=e=>{ durum.ay=e.target.value; vKar(); };
-  $("#defterXls").onclick=satisDefteriIndir;
+  $("#defterXls").onclick=satisDefteriIndir; faturaKontrolBagla();
   if ($("#alacakAc")) $("#alacakAc").onclick=alacakDefteri;
   main.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
 }
@@ -1751,8 +1751,9 @@ function sepetBos(){
   const g = {}; db.units.filter(u=>u.satis).forEach(u=>{ const k = islemKey(u); (g[k] ||= []).push(u); });
   const l = Object.entries(g).map(([k,us])=>({ k, s0:us[0].satis, n:us.length, t:r2(us.reduce((a,u)=>a+u.satis.tutar,0)), ad:us.map(u=>P(u.pid)?.model).join(", ") }))
     .sort((a,b)=>(b.s0.tarih+(b.s0.saat||"")).localeCompare(a.s0.tarih+(a.s0.saat||""))).slice(0,20);
-  main.innerHTML = `<div class="empty" style="padding:28px 12px 18px"><div style="font-size:40px">🛒</div><b style="color:var(--ink)">Sepet boş</b><br>Fiyat Ver’de üründe “Sepete ekle” ya da “Sat” deyin.</div>
+  main.innerHTML = faturaKontrolKart() + `<div class="empty" style="padding:28px 12px 18px"><div style="font-size:40px">🛒</div><b style="color:var(--ink)">Sepet boş</b><br>Fiyat Ver’de üründe “Sepete ekle” ya da “Sat” deyin.</div>
     ${l.length?`<h2>Son satışlar</h2><div class="card list">${l.map(x=>`<div class="it tap" data-fis="${esc(x.k)}"><div class="row sp"><div><b>${esc(x.s0.musteri||"Müşteri yazılmamış")}</b><div class="muted">${esc(x.s0.fisNo || (x.s0.kaynak?"Diva":"fişsiz"))} · ${trDate(x.s0.tarih)}${x.s0.belge?" · fatura "+esc(x.s0.belge)+(x.s0.faturalandi?" ✓":""):""} · ${x.n} ürün · ${esc(x.ad.slice(0,40))}</div></div><div class="sag"><b>${TL(x.t)}</b></div></div></div>`).join("")}</div>`:""}`;
+  faturaKontrolBagla();
   main.querySelectorAll("[data-fis]").forEach(d=>d.onclick=()=>{ durum.fis = d.dataset.fis; durum.fisYeni = false; render(); window.scrollTo(0,0); });
 }
 
@@ -1956,6 +1957,39 @@ function firmaKartBagla(){
     $("#mListe").querySelectorAll("[data-md]").forEach(d=>d.onclick=()=>musteriDuzenle(musteriler().find(x=>x.id===d.dataset.md))); };
   $("#mAra").oninput = ml; ml();
   $("#mYeni").onclick=()=>musteriDuzenle({ tip:"bireysel" });
+}
+
+/* ---------- Fatura numarası kontrolü: seride boşluk (eksik) ve Diva faturası bağlanmamış satış (işlenmemiş) ---------- */
+const yoksay = () => (db.settings.faturaYoksay ||= []);
+function faturaKontrol(){
+  const no = {};
+  db.units.forEach(u=>{ const s = u.satis; if (!s) return; const n0 = s.faturaNo || s.belge; if (!n0 || !/\d{3,}$/.test(n0)) return;
+    const n = faturaNoNorm(n0), x = no[n] ||= { no:n0, tarih:s.tarih, faturalandi:false, key:islemKey(u), musteri:s.musteri||"", fisNo:s.fisNo||"" };
+    if (s.faturalandi || s.kaynak) x.faturalandi = true; }); // Diva raporundan ya da Diva PDF'inden gelen: kesilmiş
+  const seri = {}, parca = n => { const m = n.match(/^(.*?)(\d+)$/); return m ? { on:m[1], d:m[2] } : null; };
+  for (const n in no) { const p = parca(n); if (p) (seri[p.on+"|"+p.d.length] ||= []).push(+p.d); }
+  const sr = seriler(); [sr.arsiv.son, sr.efatura.son].forEach(s=>{ const p = s && parca(faturaNoNorm(s)); if (p) (seri[p.on+"|"+p.d.length] ||= []).push(+p.d); }); // ayarlardaki son no da üst sınır
+  const yok = new Set(yoksay().map(faturaNoNorm)), eksik = [];
+  for (const k in seri) { const [on, len] = k.split("|"), l = [...new Set(seri[k])].sort((a,b)=>a-b);
+    for (let i=1;i<l.length;i++) { const ara = l[i]-l[i-1]-1; if (ara<=0 || ara>50) continue;
+      for (let v=l[i-1]+1; v<l[i]; v++) { const n = on + String(v).padStart(+len,"0"); if (!yok.has(n) && !no[n]) eksik.push(n); } } }
+  const islenmemis = Object.values(no).filter(x=>!x.faturalandi && x.tarih < today()).sort((a,b)=>a.tarih.localeCompare(b.tarih));
+  return { eksik, islenmemis };
+}
+const faturaKontrolKart = () => { const k = faturaKontrol(), n = k.eksik.length + k.islenmemis.length; if (!n) return "";
+  return `<div class="card tap" id="fkAc" style="background:var(--warnbg)"><b>🧾 Fatura kontrolü</b><div class="muted">${[k.eksik.length?`${k.eksik.length} eksik fatura numarası`:"", k.islenmemis.length?`${k.islenmemis.length} satışın Diva faturası yüklenmedi`:""].filter(Boolean).join(" · ")}. Görmek için dokunun.</div></div>`; };
+const faturaKontrolBagla = () => { if ($("#fkAc")) $("#fkAc").onclick = faturaKontrolListe; };
+function faturaKontrolListe(){
+  const k = faturaKontrol();
+  sheet(`<div class="row sp"><h2 style="margin:0">Fatura kontrolü</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    ${k.eksik.length?`<h2>Eksik numaralar (${k.eksik.length})</h2><div class="muted">Seride atlanan numaralar. Diva’da kesildiyse faturayı yükleyin (Stok → ＋ → Faturayı okut); iptal ya da kullanılmadıysa “Yok say”.</div>
+      <div class="card list" style="margin-top:8px">${k.eksik.map(n=>`<div class="it"><div class="row sp"><b>${esc(n)}</b><button class="mini" data-yok="${esc(n)}" style="flex:0 0 auto">Yok say</button></div></div>`).join("")}</div>`:""}
+    ${k.islenmemis.length?`<h2>Diva faturası yüklenmemiş satışlar (${k.islenmemis.length})</h2><div class="muted">Uygulamada fatura no verilmiş ama Diva’da kesilen faturası yüklenip bağlanmamış.</div>
+      <div class="card list" style="margin-top:8px">${k.islenmemis.map(x=>`<div class="it tap" data-fk="${esc(x.key)}"><div class="row sp"><div><b>${esc(x.no)}</b><div class="muted">${esc([x.fisNo, trDate(x.tarih), x.musteri].filter(Boolean).join(" · "))}</div></div><span class="pill warn" style="flex:0 0 auto">bekliyor</span></div></div>`).join("")}</div>`:""}
+    ${!k.eksik.length && !k.islenmemis.length?`<div class="empty">Eksik ya da işlenmemiş fatura yok. ✓</div>`:""}`);
+  $("#kapat").onclick=()=>{ sheetKapat(); render(); };
+  document.querySelectorAll("[data-yok]").forEach(b=>b.onclick=()=>{ yoksay().push(b.dataset.yok); save(); faturaKontrolListe(); });
+  document.querySelectorAll("[data-fk]").forEach(d=>d.onclick=()=>{ sheetKapat(); durum.fis = d.dataset.fk; durum.fisYeni = false; go("sepet"); });
 }
 
 /* Alt pencere */
