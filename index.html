@@ -280,21 +280,40 @@ const satisKar = u => satisHesap(u, { tutar:u.satis.tutar, komOran:u.satis.komOr
 
 /* Stok */
 function vStok(){
-  main.innerHTML = `${aramaKutusu("Ara…")}<div class="row" style="margin-top:8px"><div class="seg" id="filt"><button data-v="stok">Stokta</button><button data-v="hepsi">Tüm ürünler</button></div></div><div id="ozetS" style="margin-top:10px"></div><div id="liste"></div>`;
+  main.innerHTML = `${aramaKutusu("Ara…")}<div class="row" style="margin-top:8px"><div class="seg" id="filt"><button data-v="stok">Stokta</button><button data-v="eksik">Maliyeti eksik${eksikler().length?` (${eksikler().length})`:""}</button><button data-v="hepsi">Tümü</button></div></div><div id="ozetS" style="margin-top:10px"></div><div id="liste"></div>`;
   durum.filt ||= "stok";
   $("#filt").querySelectorAll("button").forEach(b=>{ b.classList.toggle("on",b.dataset.v===durum.filt); b.onclick=()=>{ durum.filt=b.dataset.v; vStok(); }; });
   aramaBagla(liste); liste();
   function liste(){
     const st = db.units.filter(u=>!u.satis), top = st.reduce((a,u)=>a+maliyet(u),0), topP = st.reduce((a,u)=>a+primliMaliyet(u),0);
     const lis = st.filter(u=>listeFiyat(P(u.pid)?.model)), lisT = lis.reduce((a,u)=>a+listeFiyat(P(u.pid).model).n,0), lisM = lis.reduce((a,u)=>a+u.alis,0);
-    $("#ozetS").innerHTML = `<div class="card"><div class="muted">Stoktaki ${st.length} cihazın maliyeti</div><div class="kdv iki"><div><span>Prim düşmeden</span><b>${TL(top)}</b></div><div class="prim"><span>Prim düştükten sonra</span><b>${TL(topP)}</b></div></div>
+    const ek = eksikler().length;
+    $("#ozetS").innerHTML = `${ek && durum.filt!=="eksik"?`<div class="card tap" id="ekUyari" style="background:var(--warnbg)"><b>${ek} üründe alış fiyatı eksik</b> <span class="muted">— göstermek için dokunun</span></div>`:""}<div class="card"><div class="muted">Stoktaki ${st.length} cihazın maliyeti</div><div class="kdv iki"><div><span>Prim düşmeden</span><b>${TL(top)}</b></div><div class="prim"><span>Prim düştükten sonra</span><b>${TL(topP)}</b></div></div>
       ${lis.length?`<div class="row sp" style="margin-top:8px"><span class="muted">${lis.length} cihaz bugün alınsa (${esc(guncelListe().ad)}, nakit)</span><b>${TL(lisT)}</b></div><div class="row sp"><span class="muted">Senin alışına göre fark</span><b class="${lisT>=lisM?"pos":"neg"}">${lisT>=lisM?"+":""}${TL(lisT-lisM)}</b></div>`:""}</div>`;
+    if ($("#ekUyari")) $("#ekUyari").onclick=()=>{ durum.filt="eksik"; vStok(); };
+    if (durum.filt==="eksik") return eksikListe();
     const l = ara(durum.q, durum.filt==="stok");
     $("#liste").innerHTML = l.length ? `<div class="card list">${l.map(p=>{ const n=stoktaki(p.id).length, sat=db.units.filter(u=>u.pid===p.id&&u.satis).length;
       return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}${sat?` · ${sat} satıldı`:""}</div></div><span class="pill ${n?"":"bad"}" style="flex:0 0 auto;white-space:nowrap">${n} stokta</span></div></div>`; }).join("")}</div>` : `<div class="empty">Ürün yok.</div>`;
     $("#liste").querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
   }
+  /* Alış fiyatı girilmemiş ürünler: fiyat aynı ekrandan topluca girilir */
+  function eksikListe(){
+    const q = (durum.q||"").trim(), l = eksikler().filter(p=>!q || ara(q).includes(p));
+    if (!l.length) { $("#liste").innerHTML = `<div class="empty">${eksikler().length?"Aramaya uyan ürün yok.":"Bütün stokta alış fiyatı girilmiş. 👍"}</div>`; return; }
+    $("#liste").innerHTML = `<div class="card" style="background:var(--warnbg)"><b>${l.length} üründe alış fiyatı yok.</b> <span class="muted">Birim alış fiyatını (KDV dahil) yazıp “Kaydet”e basın; o ürünün stoktaki bütün cihazlarına işlenir.</span></div>
+      <div class="card list">${l.map(p=>{ const n = stoktaki(p.id).filter(u=>!u.alis).length;
+        return `<div class="it" data-p="${p.id}"><div class="row sp"><div><h3 class="tap" data-ac="${p.id}">${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")} · ${n} cihaz</div></div></div>
+          <div class="row" style="margin-top:6px"><input inputmode="decimal" placeholder="Birim alış fiyatı" data-fiyat="${p.id}"><button class="mini" data-kay="${p.id}" style="flex:0 0 auto;padding:10px 14px">Kaydet</button></div></div>`; }).join("")}</div>
+      <button class="b" id="eksikHepsi">Yazılanların hepsini kaydet</button>`;
+    const kaydet = pid => { const inp = $(`[data-fiyat="${pid}"]`), n = r2(num(inp.value)); if (!n) return 0; stoktaki(pid).filter(u=>!u.alis).forEach(u=>u.alis=n); return 1; };
+    $("#liste").querySelectorAll("[data-kay]").forEach(b=>b.onclick=()=>{ if (!kaydet(b.dataset.kay)) return alert("Fiyat yazın."); save(); toast("Kaydedildi"); vStok(); });
+    $("#liste").querySelectorAll("[data-ac]").forEach(h=>h.onclick=()=>urunDetay(h.dataset.ac));
+    $("#eksikHepsi").onclick=()=>{ let k=0; l.forEach(p=>k+=kaydet(p.id)); if (!k) return alert("Hiç fiyat yazılmamış."); save(); toast(`${k} ürünün fiyatı kaydedildi`); vStok(); };
+  }
 }
+/* Stokta alış fiyatı 0 olan cihazı bulunan ürünler */
+const eksikler = () => { const s = new Set(db.units.filter(u=>!u.satis && !u.alis).map(u=>u.pid)); return db.products.filter(p=>s.has(p.id)); };
 function urunDetay(pid){
   const p = P(pid), us = db.units.filter(u=>u.pid===pid).sort((a,b)=>(!!a.satis-!!b.satis)||a.gTarih.localeCompare(b.gTarih));
   sheet(`<div class="row sp"><h2 style="margin:0">${esc(pAd(p))}</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
