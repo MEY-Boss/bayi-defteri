@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Bayi Defteri">
+<meta name="theme-color" content="#0f3d5e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Bayi Defteri</title>
+<style>
+:root{
+  --bg:#f4f6f8; --card:#fff; --ink:#15212b; --muted:#66727d; --line:#e1e6ea;
+  --brand:#0f3d5e; --brand2:#e8f0f6; --ok:#1b7a43; --okbg:#e6f4ec; --bad:#b3261e; --badbg:#fbe9e7; --warn:#8a5a00; --warnbg:#fff4dc;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0e141a; --card:#17212a; --ink:#e7edf2; --muted:#93a1ad; --line:#2a3743;
+    --brand:#7fb6dd; --brand2:#1d2c38; --ok:#6fd39a; --okbg:#173326; --bad:#ff8a80; --badbg:#3a1c1a; --warn:#f2c46b; --warnbg:#3a2f15; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top) + 10px) 16px 8px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:22px}
+main{padding:12px 16px calc(90px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+nav{position:fixed;bottom:0;left:0;right:0;z-index:6;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;color:var(--muted);padding:8px 0 6px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button .i{font-size:20px;line-height:1}
+nav button.on{color:var(--brand);font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1;min-width:0}
+.sp{justify-content:space-between}
+.muted{color:var(--muted);font-size:13px}
+.big{font-size:20px;font-weight:700}
+h2{font-size:17px;margin:14px 0 8px}
+h3{font-size:15px;margin:0 0 4px}
+label{display:block;font-size:13px;color:var(--muted);margin:8px 0 3px}
+input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink)}
+textarea{min-height:70px}
+button.b{border:0;border-radius:10px;padding:12px 14px;font-size:16px;font-weight:600;background:var(--brand);color:#fff;width:100%;margin-top:10px}
+@media (prefers-color-scheme: dark){button.b{color:#0e141a}}
+button.b2{border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:15px;background:var(--card);color:var(--ink)}
+button.b2.red{color:var(--bad)}
+button.mini{white-space:nowrap;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:13px;background:var(--card);color:var(--brand);font-weight:600}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{flex:1;border:0;padding:9px 4px;background:var(--card);color:var(--ink);font-size:14px}
+.seg button.on{background:var(--brand);color:#fff}
+@media (prefers-color-scheme: dark){.seg button.on{color:#0e141a}}
+.kdv{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}
+.kdv div{background:var(--brand2);border-radius:8px;padding:6px 8px}
+.kdv b{display:block;font-size:14px;white-space:nowrap;letter-spacing:-.2px}
+.kdv span{font-size:11px;color:var(--muted)}
+.pill{display:inline-block;font-size:12px;border-radius:20px;padding:2px 8px;background:var(--brand2);color:var(--brand);font-weight:600}
+.pill.ok{background:var(--okbg);color:var(--ok)} .pill.bad{background:var(--badbg);color:var(--bad)} .pill.warn{background:var(--warnbg);color:var(--warn)}
+.pos{color:var(--ok)} .neg{color:var(--bad)}
+.list .it{padding:10px 0;border-top:1px solid var(--line)}
+.list .it:first-child{border-top:0}
+.tap{cursor:pointer}
+.empty{text-align:center;color:var(--muted);padding:30px 10px}
+.stat{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat .card{margin:0}
+.res{background:var(--okbg);border-radius:10px;padding:10px;margin-top:10px}
+.res.neg{background:var(--badbg)}
+.sheet{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center}
+.sheet>div{background:var(--bg);width:100%;max-width:720px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:14px 16px calc(20px + env(safe-area-inset-bottom))}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(80px + env(safe-area-inset-bottom));background:#15212b;color:#fff;padding:10px 16px;border-radius:20px;z-index:30;font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{text-align:left;padding:4px;border-bottom:1px solid var(--line)}
+.hide{display:none}
+.row>.sag{flex:0 0 auto;max-width:48%;text-align:right}
+html,body{overflow-x:hidden}
+</style>
+<style>
+.kdv.iki{grid-template-columns:1fr 1fr}
+.kdv div.prim{background:var(--okbg)}
+.satir{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px}
+.satir.kapali{opacity:.45}
+.yuk{display:flex;align-items:center;gap:10px;padding:14px;background:var(--brand2);border-radius:10px;margin-top:10px}
+</style>
+</head>
+<body>
+<header><h1 id="title">Fiyat Ver</h1></header>
+<main id="main"></main>
+<nav id="nav">
+  <button data-t="fiyat"><span class="i">₺</span>Fiyat Ver</button>
+  <button data-t="stok"><span class="i">▦</span>Stok</button>
+  <button data-t="giris"><span class="i">＋</span>Giriş</button>
+  <button data-t="kar"><span class="i">↗</span>Kâr</button>
+  <button data-t="diger"><span class="i">⋯</span>Diğer</button>
+</nav>
+<div id="sheet"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<script>
+"use strict";
+/* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
+   Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
+const KEY = "bayiDefteri.v1";
+const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:0, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, apiKey:"" } });
+let db;
+function load(){
+  try { db = JSON.parse(localStorage.getItem(KEY)) || BOS(); } catch(e){ db = BOS(); }
+  normalize();
+}
+function normalize(){
+  const d = BOS(); db.settings = Object.assign(d.settings, db.settings||{}); db.settings.kom = Object.assign(d.settings.kom, db.settings.kom||{});
+  db.products ||= []; db.units ||= [];
+  if ((db.v||1) < 2) { // v1: KDV hariç tutuluyordu → KDV dahile çevir
+    db.units.forEach(u=>{ const o=1+(u.kdv??20)/100;
+      if (u.alisHaric!=null){ u.alis=r2(u.alisHaric*o); u.ekMaliyet=r2((u.ekMaliyet||0)*o); delete u.alisHaric; }
+      if (u.satis && u.satis.dahil!=null){ const s=u.satis; u.satis={ tarih:s.tarih, tutar:s.dahil, odeme:s.odeme, komOran:s.komOran, kom:s.kom, gider:r2(s.gider*o), musteri:s.musteri, not:s.not }; }
+      delete u.kdv; });
+    delete db.settings.kdv; db.v = 2;
+  }
+}
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch(e){ alert("Kaydedilemedi: telefonda yer kalmamış olabilir. Diğer → Yedek al."); }
+}
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2));
+const P = id => db.products.find(p=>p.id===id);
+const r2 = n => Math.round((+n||0)*100)/100;
+const TL = n => (+n||0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})+" ₺";
+const virgul = n => n ? String(n).replace(".",",") : "";
+const today = () => new Date().toISOString().slice(0,10);
+const trDate = s => s ? s.split("-").reverse().join(".") : "";
+const gun = s => Math.max(0, Math.floor((Date.now()-new Date(s).getTime())/864e5));
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function num(v){
+  if (typeof v === "number") return v;
+  let s = String(v??"").replace(/[₺\s]|TL/gi,"");
+  if (!s) return 0;
+  if (s.includes(",") && s.includes(".")) s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g,"").replace(",",".") : s.replace(/,/g,"");
+  else if (s.includes(",")) s = s.replace(",",".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,"");
+  const n = parseFloat(s); return isNaN(n) ? 0 : n;
+}
+/* Maliyet ve prim */
+const maliyet = u => r2(u.alis + (u.ekMaliyet||0));
+const primOran = u => { const p = P(u.pid); return p && p.prim != null && p.prim !== "" ? num(p.prim) : num(db.settings.prim); };
+const primTutar = u => r2(u.alis * primOran(u)/100);
+const primliMaliyet = u => r2(maliyet(u) - primTutar(u));
+const maliyetKutu = u => `<div class="kdv iki"><div><span>Maliyet (prim düşmeden)</span><b>${TL(maliyet(u))}</b></div><div class="prim"><span>Prim düştükten sonra · %${primOran(u)}</span><b>${TL(primliMaliyet(u))}</b></div></div>`;
+function satisHesap(u, s){
+  const tutar = r2(num(s.tutar)), kom = r2(tutar * num(s.komOran)/100), gider = r2(num(s.gider));
+  const kar = r2(tutar - maliyet(u) - kom - gider), prim = primTutar(u);
+  return { tutar, kom, gider, maliyet:maliyet(u), kar, prim, karPrimli:r2(kar+prim), oran: maliyet(u) ? kar/maliyet(u)*100 : 0 };
+}
+/* Hedef kâr %'si (maliyet üstüne) için satış fiyatı; komisyon satış tutarından kesilir */
+const fiyatIcin = (c, marj, komOran) => r2(c*(1+num(marj)/100) / (1 - num(komOran)/100));
+const stoktaki = pid => db.units.filter(u=>u.pid===pid && !u.satis);
+const pAd = p => p ? [p.marka, p.model].filter(Boolean).join(" ") + (p.ad ? " · "+p.ad : "") : "(silinmiş ürün)";
+const normModel = s => String(s||"").toLocaleUpperCase("tr").replace(/\s+/g,"");
+function ara(q, sadeceStok){
+  q = (q||"").toLocaleLowerCase("tr").trim();
+  return db.products.filter(p=>{
+    if (sadeceStok && !stoktaki(p.id).length) return false;
+    if (!q) return true;
+    const hay = [p.marka,p.kategori,p.model,p.ad,p.barkod].join(" ").toLocaleLowerCase("tr");
+    if (q.split(/\s+/).every(w=>hay.includes(w))) return true;
+    return db.units.some(u=>u.pid===p.id && (u.seri||"").toLocaleLowerCase("tr").includes(q));
+  });
+}
+function toast(t){ const d=document.createElement("div"); d.className="toast"; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),2400); }
+
+/* ---------- Ekranlar ---------- */
+const $ = s => document.querySelector(s);
+const main = $("#main");
+let tab = "fiyat", durum = { q:"", pid:null, marj:null, odeme:"kart" };
+const BASLIK = { fiyat:"Fiyat Ver", stok:"Stok", giris:"Ürün Girişi", kar:"Kâr", diger:"Diğer" };
+function go(t){ tab=t; $("#title").textContent=BASLIK[t]; document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t)); render(); window.scrollTo(0,0); }
+function render(){ ({fiyat:vFiyat, stok:vStok, giris:vGiris, kar:vKar, diger:vDiger})[tab](); }
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.t));
+const aramaKutusu = ph => `<input id="q" type="search" placeholder="${ph}" value="${esc(durum.q)}" autocomplete="off">`;
+function aramaBagla(cb){ const q=$("#q"); q.oninput=()=>{ durum.q=q.value; cb(); }; }
+const ODEME = { nakit:"Nakit", havale:"Havale/EFT", kart:"Kart tek çekim", taksit:"Kart taksit" };
+const odemeOps = sec => Object.entries(ODEME).map(([k,v])=>`<option value="${k}"${k===sec?" selected":""}>${v}</option>`).join("");
+
+/* Fiyat Ver */
+function vFiyat(){
+  const s = db.settings;
+  if (durum.marj==null) durum.marj = s.marj;
+  main.innerHTML = `${aramaKutusu("Model, marka, seri no ara…")}<div id="sonuc"></div>`;
+  aramaBagla(sonuc); sonuc();
+  function sonuc(){
+    const el = $("#sonuc");
+    if (durum.pid && P(durum.pid)) return detay(P(durum.pid));
+    const l = ara(durum.q, true);
+    if (!db.products.length) { el.innerHTML = `<div class="empty">Henüz ürün yok.<br>“Giriş”ten faturayı okutun ya da Diğer → Listeden yükle.</div>`; return; }
+    el.innerHTML = l.length ? `<div class="card list">${l.slice(0,60).map(p=>{
+      const st = stoktaki(p.id), ms = st.map(maliyet), mn = Math.min(...ms), mx = Math.max(...ms);
+      return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}</div></div><div class="sag"><span class="pill">${st.length} adet</span><div class="muted">maliyet ${TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
+    }).join("")}</div>` : `<div class="empty">Stokta eşleşen ürün yok.</div>`;
+    el.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>{ durum.pid=d.dataset.p; sonuc(); });
+  }
+  function detay(p){
+    const el = $("#sonuc"), st = stoktaki(p.id).sort((a,b)=>a.gTarih.localeCompare(b.gTarih));
+    const kom = s.kom[durum.odeme]||0;
+    el.innerHTML = `
+      <div class="card"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}${p.liste?` · liste fiyatı ${TL(p.liste)}`:""}</div></div><button class="mini" id="geri" style="flex:0 0 auto">Geri</button></div></div>
+      <div class="card">
+        <div class="row"><div><label>Hedef kâr % (maliyet üstüne)</label><input id="marj" inputmode="decimal" value="${durum.marj}"></div>
+        <div><label>Ödeme</label><select id="od">${odemeOps(durum.odeme)}</select></div></div>
+        <div class="muted" style="margin-top:6px">Komisyon %${kom} · tüm tutarlar KDV dahil</div>
+      </div>
+      ${st.length ? st.map(u=>{
+        const o = fiyatIcin(maliyet(u), durum.marj, kom), z = fiyatIcin(maliyet(u), 0, kom), zp = fiyatIcin(primliMaliyet(u), 0, kom);
+        return `<div class="card">
+          <div class="row sp"><div><b>Seri: ${esc(u.seri||"—")}</b><div class="muted">Giriş ${trDate(u.gTarih)} · ${gun(u.gTarih)} gündür stokta</div></div>${gun(u.gTarih)>90?'<span class="pill warn" style="flex:0 0 auto">bekleyen</span>':""}</div>
+          ${maliyetKutu(u)}
+          ${u.ekMaliyet?`<div class="muted">Alış ${TL(u.alis)} + ek maliyet ${TL(u.ekMaliyet)}</div>`:""}
+          <div class="res"><div class="muted">Önerilen satış fiyatı (%${durum.marj} kâr, prim hariç)</div><div class="big">${TL(o)}</div></div>
+          <div class="res neg"><div class="row sp"><span class="muted">Zarar sınırı · primsiz</span><b>${TL(z)}</b></div><div class="row sp"><span class="muted">Zarar sınırı · prim düşünce</span><b>${TL(zp)}</b></div></div>
+          <button class="b" data-sat="${u.id}" data-f="${o}">Bu cihazı sat</button>
+        </div>`;}).join("") : `<div class="empty">Bu üründen stokta cihaz kalmamış.</div>`}`;
+    $("#geri").onclick=()=>{ durum.pid=null; vFiyat(); };
+    $("#marj").onchange=e=>{ durum.marj=num(e.target.value); detay(p); };
+    $("#od").onchange=e=>{ durum.odeme=e.target.value; detay(p); };
+    el.querySelectorAll("[data-sat]").forEach(b=>b.onclick=()=>satisFormu(b.dataset.sat, +b.dataset.f));
+  }
+}
+
+/* Satış formu */
+function satisFormu(uidSec, fiyat){
+  const u = db.units.find(x=>x.id===uidSec), p = P(u.pid), s = db.settings;
+  sheet(`<h2>Satış · ${esc(pAd(p))}</h2><div class="muted">Seri: ${esc(u.seri||"—")}</div>${maliyetKutu(u)}
+    <label>Satış fiyatı (KDV dahil)</label><input id="sTutar" inputmode="decimal" value="${virgul(fiyat)}">
+    <div class="row"><div><label>Ödeme</label><select id="sOd">${odemeOps(durum.odeme)}</select></div><div style="flex:0 0 100px"><label>Komisyon %</label><input id="sKom" inputmode="decimal" value="${s.kom[durum.odeme]||0}"></div></div>
+    <label>Ek gider (montaj, nakliye, takas indirimi) — ₺</label><input id="sGider" inputmode="decimal" placeholder="0">
+    <div class="row"><div><label>Tarih</label><input id="sTarih" type="date" value="${today()}"></div><div><label>Müşteri (isteğe bağlı)</label><input id="sMus"></div></div>
+    <label>Not</label><input id="sNot">
+    <div id="sOzet"></div>
+    <button class="b" id="sKaydet">Satışı kaydet</button><button class="b2" id="kapat" style="width:100%;margin-top:8px">Vazgeç</button>`);
+  const oku = () => ({ tutar:$("#sTutar").value, odeme:$("#sOd").value, komOran:num($("#sKom").value), gider:$("#sGider").value, tarih:$("#sTarih").value||today(), musteri:$("#sMus").value.trim(), not:$("#sNot").value.trim() });
+  const ozet = () => { const h = satisHesap(u, oku());
+    $("#sOzet").innerHTML = `<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Satış</span><b>${TL(h.tutar)}</b></div><div class="row sp"><span>Maliyet</span><b>−${TL(h.maliyet)}</b></div><div class="row sp"><span>Komisyon</span><b>−${TL(h.kom)}</b></div><div class="row sp"><span>Ek gider</span><b>−${TL(h.gider)}</b></div>
+      <div class="row sp" style="margin-top:4px"><span class="big">Kâr</span><span class="big ${h.kar<0?"neg":"pos"}">${TL(h.kar)}</span></div>
+      <div class="row sp"><span>Prim düşünce kâr</span><b class="${h.karPrimli<0?"neg":"pos"}">${TL(h.karPrimli)}</b></div>
+      <div class="muted">Maliyete göre %${h.oran.toFixed(1)} · yıl sonu primi ${TL(h.prim)}</div></div>`; };
+  $("#sOd").onchange=e=>{ $("#sKom").value = s.kom[e.target.value]||0; ozet(); };
+  ["#sTutar","#sKom","#sGider"].forEach(i=>$(i).oninput=ozet);
+  ozet();
+  $("#kapat").onclick=sheetKapat;
+  $("#sKaydet").onclick=()=>{
+    const o = oku(); if (!num(o.tutar)) return alert("Satış fiyatını yazın.");
+    const h = satisHesap(u,o);
+    u.satis = { tarih:o.tarih, tutar:h.tutar, odeme:o.odeme, komOran:o.komOran, kom:h.kom, gider:h.gider, musteri:o.musteri, not:o.not };
+    durum.odeme = o.odeme; save(); sheetKapat(); durum.pid = stoktaki(p.id).length ? p.id : null; toast("Satış kaydedildi · kâr "+TL(h.kar)); render();
+  };
+}
+/* Kayıtlı satışın rakamları (prim ayarı değişirse kâr da güncellenir) */
+const satisKar = u => satisHesap(u, { tutar:u.satis.tutar, komOran:u.satis.komOran, gider:u.satis.gider });
+
+/* Stok */
+function vStok(){
+  main.innerHTML = `${aramaKutusu("Ara…")}<div class="row" style="margin-top:8px"><div class="seg" id="filt"><button data-v="stok">Stokta</button><button data-v="hepsi">Tüm ürünler</button></div></div><div id="ozetS" style="margin-top:10px"></div><div id="liste"></div>`;
+  durum.filt ||= "stok";
+  $("#filt").querySelectorAll("button").forEach(b=>{ b.classList.toggle("on",b.dataset.v===durum.filt); b.onclick=()=>{ durum.filt=b.dataset.v; vStok(); }; });
+  aramaBagla(liste); liste();
+  function liste(){
+    const st = db.units.filter(u=>!u.satis), top = st.reduce((a,u)=>a+maliyet(u),0), topP = st.reduce((a,u)=>a+primliMaliyet(u),0);
+    $("#ozetS").innerHTML = `<div class="card"><div class="muted">Stoktaki ${st.length} cihazın maliyeti</div><div class="kdv iki"><div><span>Prim düşmeden</span><b>${TL(top)}</b></div><div class="prim"><span>Prim düştükten sonra</span><b>${TL(topP)}</b></div></div></div>`;
+    const l = ara(durum.q, durum.filt==="stok");
+    $("#liste").innerHTML = l.length ? `<div class="card list">${l.map(p=>{ const n=stoktaki(p.id).length, sat=db.units.filter(u=>u.pid===p.id&&u.satis).length;
+      return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}${sat?` · ${sat} satıldı`:""}</div></div><span class="pill ${n?"":"bad"}" style="flex:0 0 auto;white-space:nowrap">${n} stokta</span></div></div>`; }).join("")}</div>` : `<div class="empty">Ürün yok.</div>`;
+    $("#liste").querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
+  }
+}
+function urunDetay(pid){
+  const p = P(pid), us = db.units.filter(u=>u.pid===pid).sort((a,b)=>(!!a.satis-!!b.satis)||a.gTarih.localeCompare(b.gTarih));
+  sheet(`<div class="row sp"><h2 style="margin:0">${esc(pAd(p))}</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc([p.kategori, p.barkod&&"barkod "+p.barkod, p.liste&&"liste "+TL(p.liste), "prim %"+(p.prim!=null&&p.prim!==""?p.prim:db.settings.prim+" (genel)")].filter(Boolean).join(" · "))}</div>
+    <div class="row" style="margin-top:10px"><button class="b2" id="duz">Ürünü düzenle</button><button class="b2" id="ekle">Bu üründen giriş</button></div>
+    <h2>Cihazlar (${us.length})</h2>
+    ${us.map(u=>{ const h = u.satis && satisKar(u); return `<div class="card"><div class="row sp"><b>Seri: ${esc(u.seri||"—")}</b>${u.satis?`<span class="pill ok" style="flex:0 0 auto">satıldı</span>`:`<span class="pill" style="flex:0 0 auto">stokta ${gun(u.gTarih)} gün</span>`}</div>
+      <div class="muted">Giriş ${trDate(u.gTarih)}${u.tedarikci?" · "+esc(u.tedarikci):""}${u.fatura?" · fatura "+esc(u.fatura):""}</div>
+      ${maliyetKutu(u)}
+      ${u.satis?`<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Satış ${trDate(u.satis.tarih)} · ${ODEME[u.satis.odeme]||""}</span><b>${TL(u.satis.tutar)}</b></div><div class="row sp"><span>Kâr</span><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b></div><div class="row sp"><span>Prim düşünce kâr</span><b>${TL(h.karPrimli)}</b></div>${u.satis.musteri?`<div class="muted">${esc(u.satis.musteri)}</div>`:""}</div>`:""}
+      <div class="row" style="margin-top:8px">${u.satis?`<button class="b2" data-geri="${u.id}">Satışı geri al</button>`:`<button class="b2" data-sat="${u.id}">Sat</button><button class="b2" data-ud="${u.id}">Düzenle</button>`}<button class="b2 red" data-sil="${u.id}">Sil</button></div></div>`; }).join("")}
+    <button class="b2 red" id="usil" style="width:100%;margin-top:10px">Ürünü tamamen sil</button>`);
+  $("#kapat").onclick=sheetKapat;
+  $("#duz").onclick=()=>urunFormu(p);
+  $("#ekle").onclick=()=>{ sheetKapat(); durum.girisPid=pid; go("giris"); };
+  $("#usil").onclick=()=>{ if(!confirm("Ürün ve tüm cihaz kayıtları silinsin mi? (satış geçmişi dahil)")) return; db.units=db.units.filter(u=>u.pid!==pid); db.products=db.products.filter(x=>x.id!==pid); save(); sheetKapat(); render(); };
+  document.querySelectorAll("#sheet [data-sat]").forEach(b=>b.onclick=()=>{ const u=db.units.find(x=>x.id===b.dataset.sat); satisFormu(u.id, p.liste||fiyatIcin(maliyet(u),db.settings.marj,db.settings.kom[durum.odeme]||0)); });
+  document.querySelectorAll("#sheet [data-geri]").forEach(b=>b.onclick=()=>{ if(!confirm("Satış silinip cihaz stoğa geri alınsın mı?")) return; db.units.find(x=>x.id===b.dataset.geri).satis=null; save(); urunDetay(pid); render(); });
+  document.querySelectorAll("#sheet [data-sil]").forEach(b=>b.onclick=()=>{ if(!confirm("Bu cihaz kaydı silinsin mi?")) return; db.units=db.units.filter(x=>x.id!==b.dataset.sil); save(); urunDetay(pid); render(); });
+  document.querySelectorAll("#sheet [data-ud]").forEach(b=>b.onclick=()=>cihazFormu(db.units.find(x=>x.id===b.dataset.ud)));
+}
+const KATEGORI = ["Buzdolabı","Çamaşır makinesi","Bulaşık makinesi","Kurutma makinesi","Fırın","Ocak","Davlumbaz","Derin dondurucu","Klima","Süpürge","Küçük ev aleti"];
+function urunAlanlari(p={}, on=""){
+  return `<div class="row"><div><label>Marka</label><input id="${on}pMarka" value="${esc(p.marka||"Profilo")}" list="markalar"></div><div><label>Kategori</label><input id="${on}pKat" value="${esc(p.kategori||"")}" list="kategoriler" placeholder="Buzdolabı…"></div></div>
+    <label>Model kodu *</label><input id="${on}pModel" value="${esc(p.model||"")}" autocapitalize="characters">
+    <label>Ürün adı / açıklama</label><input id="${on}pAd" value="${esc(p.ad||"")}">
+    <div class="row"><div><label>Barkod</label><input id="${on}pBarkod" inputmode="numeric" value="${esc(p.barkod||"")}"></div><div><label>Liste fiyatı</label><input id="${on}pListe" inputmode="decimal" value="${virgul(p.liste)}"></div></div>
+    <label>Yıl sonu primi % (boş = genel oran %${db.settings.prim})</label><input id="${on}pPrim" inputmode="decimal" value="${p.prim!=null?virgul(p.prim):""}">
+    <datalist id="markalar">${[...new Set(["Profilo","Bosch","Siemens",...db.products.map(x=>x.marka)])].filter(Boolean).map(m=>`<option value="${esc(m)}">`).join("")}</datalist>
+    <datalist id="kategoriler">${[...new Set([...KATEGORI,...db.products.map(x=>x.kategori)])].filter(Boolean).map(m=>`<option value="${esc(m)}">`).join("")}</datalist>`;
+}
+const urunOku = (on="") => { const g=id=>$("#"+on+id).value.trim(); return { marka:g("pMarka"), kategori:g("pKat"), model:g("pModel"), ad:g("pAd"), barkod:g("pBarkod"), liste:num(g("pListe"))||null, prim:g("pPrim")===""?null:num(g("pPrim")) }; };
+function urunFormu(p){
+  sheet(`<h2>Ürünü düzenle</h2>${urunAlanlari(p)}<button class="b" id="kay">Kaydet</button><button class="b2" id="vaz" style="width:100%;margin-top:8px">Vazgeç</button>`);
+  $("#vaz").onclick=()=>urunDetay(p.id);
+  $("#kay").onclick=()=>{ const v=urunOku(); if(!v.model) return alert("Model kodu gerekli."); Object.assign(p,v); save(); urunDetay(p.id); render(); };
+}
+function cihazFormu(u){
+  sheet(`<h2>Cihazı düzenle</h2>
+    <label>Seri no</label><input id="cSeri" value="${esc(u.seri||"")}">
+    <div class="row"><div><label>Alış fiyatı (KDV dahil)</label><input id="cAlis" inputmode="decimal" value="${virgul(u.alis)}"></div><div><label>Ek maliyet</label><input id="cEk" inputmode="decimal" value="${virgul(u.ekMaliyet)}"></div></div>
+    <div class="row"><div><label>Giriş tarihi</label><input id="cTar" type="date" value="${u.gTarih}"></div><div><label>Fatura no</label><input id="cFat" value="${esc(u.fatura||"")}"></div></div>
+    <label>Tedarikçi</label><input id="cTed" value="${esc(u.tedarikci||"")}">
+    <button class="b" id="kay">Kaydet</button><button class="b2" id="vaz" style="width:100%;margin-top:8px">Vazgeç</button>`);
+  $("#vaz").onclick=()=>urunDetay(u.pid);
+  $("#kay").onclick=()=>{ Object.assign(u,{ seri:$("#cSeri").value.trim(), alis:r2(num($("#cAlis").value)), ekMaliyet:r2(num($("#cEk").value)), gTarih:$("#cTar").value||u.gTarih, fatura:$("#cFat").value.trim(), tedarikci:$("#cTed").value.trim() });
+    save(); urunDetay(u.pid); render(); };
+}
+/* Model koduna göre ürün bul ya da aç */
+function urunBulAc(v){
+  let p = db.products.find(x=>normModel(x.model)===normModel(v.model));
+  if (!p) { p = { id:uid(), marka:v.marka||"Profilo", kategori:v.kategori||"", model:v.model.trim(), ad:v.ad||"", barkod:v.barkod||"", liste:v.liste||null, prim:v.prim??null }; db.products.push(p); }
+  else { for (const a of ["kategori","ad","barkod"]) if (!p[a] && v[a]) p[a]=v[a]; }
+  return p;
+}
+function cihazEkle(p, n, seriler, ortak){
+  for (let i=0;i<n;i++) db.units.push({ id:uid(), pid:p.id, seri:seriler[i]||"", gTarih:ortak.gTarih||today(), alis:r2(ortak.alis), ekMaliyet:r2(ortak.ekMaliyet||0), fatura:ortak.fatura||"", tedarikci:ortak.tedarikci||"", satis:null });
+}
+
+/* Giriş */
+function vGiris(){
+  const secili = durum.girisPid && P(durum.girisPid);
+  main.innerHTML = `
+    <div class="card" style="background:var(--brand2)"><h3>Faturadan giriş</h3><div class="muted">Faturanın fotoğrafını çekin ya da e-fatura PDF’ini seçin; kalemler okunur, siz kontrol edip stoğa alırsınız.</div>
+      <button class="b" id="fBtn">📷 Faturayı okut</button><input type="file" id="fDosya" accept="image/*,application/pdf" class="hide"></div>
+    <h2>Elle giriş</h2>
+    <div class="card"><h3>1 · Ürün</h3>
+      ${secili ? `<div class="row sp"><b>${esc(pAd(secili))}</b><button class="mini" id="degis" style="flex:0 0 auto">Değiştir</button></div>` :
+      `<input id="gq" type="search" placeholder="Kayıtlı üründe ara (model)…"><div id="gsec"></div>
+       <div class="muted" style="margin-top:8px">ya da yeni ürün:</div>${urunAlanlari()}`}
+    </div>
+    <div class="card"><h3>2 · Alış fiyatı (1 adet, KDV dahil)</h3>
+      <input id="gAlis" inputmode="decimal" placeholder="0,00">
+      <label>Ek maliyet / adet — nakliye, indirme vb.</label><input id="gEk" inputmode="decimal" placeholder="0">
+    </div>
+    <div class="card"><h3>3 · Cihazlar</h3>
+      <label>Seri numaraları — her satıra bir tane</label><textarea id="gSeri" placeholder="Her cihazın seri numarası ayrı satıra"></textarea>
+      <div class="muted">Seri no yazmazsanız adet kadar kayıt açılır, seriyi sonra eklersiniz.</div>
+      <label>Adet (seri no yoksa)</label><input id="gAdet" inputmode="numeric" value="1">
+    </div>
+    <div class="card"><h3>4 · Belge</h3>
+      <div class="row"><div><label>Giriş tarihi</label><input id="gTar" type="date" value="${today()}"></div><div><label>Fatura no</label><input id="gFat"></div></div>
+      <label>Tedarikçi</label><input id="gTed" value="${esc(durum.sonTed||"")}">
+    </div>
+    <div id="gTop"></div>
+    <button class="b" id="gKay">Girişi kaydet</button>`;
+  $("#fBtn").onclick=()=>$("#fDosya").click();
+  $("#fDosya").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; if(f) faturaOku(f); };
+  const top = () => { const seri=$("#gSeri").value.split("\n").map(x=>x.trim()).filter(Boolean), n=seri.length||Math.max(1,parseInt($("#gAdet").value)||1), a=num($("#gAlis").value)+num($("#gEk").value);
+    $("#gTop").innerHTML = a ? `<div class="card"><div class="row sp"><span>${n} cihaz · toplam maliyet</span><b>${TL(a*n)}</b></div></div>` : ""; };
+  ["#gAlis","#gEk","#gSeri","#gAdet"].forEach(i=>$(i).oninput=top);
+  if (secili) $("#degis").onclick=()=>{ durum.girisPid=null; vGiris(); };
+  else { const gq=$("#gq"); gq.oninput=()=>{ const l=gq.value.trim()?ara(gq.value).slice(0,8):[]; $("#gsec").innerHTML=l.map(p=>`<div class="it tap" data-p="${p.id}" style="padding:8px 0;border-bottom:1px solid var(--line)">${esc(pAd(p))} <span class="muted">· ${stoktaki(p.id).length} stokta</span></div>`).join(""); $("#gsec").querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>{ durum.girisPid=d.dataset.p; vGiris(); }); }; }
+  $("#gKay").onclick=()=>{
+    let p = secili;
+    if (!p) { const v = urunOku(); if (!v.model) return alert("Model kodunu yazın ya da kayıtlı bir ürün seçin."); p = urunBulAc(v); if (v.prim!=null) p.prim=v.prim; }
+    const alis = num($("#gAlis").value); if (!alis) return alert("Alış fiyatını yazın.");
+    const seri = $("#gSeri").value.split("\n").map(x=>x.trim()).filter(Boolean);
+    const cift = seri.filter(sr=>db.units.some(u=>u.seri===sr));
+    if (cift.length && !confirm("Bu seri no zaten kayıtlı: "+cift.join(", ")+"\nYine de eklensin mi?")) return;
+    const n = seri.length || Math.max(1, parseInt($("#gAdet").value)||1);
+    const ortak = { gTarih:$("#gTar").value, alis, ekMaliyet:num($("#gEk").value), fatura:$("#gFat").value.trim(), tedarikci:$("#gTed").value.trim() };
+    cihazEkle(p, n, seri, ortak);
+    durum.sonTed = ortak.tedarikci; durum.girisPid = null; save();
+    toast(`${n} cihaz stoğa girdi`); vGiris();
+  };
+}
+
+/* ---------- Fatura okuma (Claude) ---------- */
+const FATURA_SEMA = { type:"object", additionalProperties:false, required:["fatura_no","tarih","tedarikci","kalemler","not"], properties:{
+  fatura_no:{type:"string"}, tarih:{type:"string", description:"YYYY-AA-GG, okunamazsa boş"}, tedarikci:{type:"string"}, not:{type:"string"},
+  kalemler:{ type:"array", items:{ type:"object", additionalProperties:false, required:["model","aciklama","marka","kategori","adet","birim_fiyat_kdv_dahil","seri_nolar"], properties:{
+    model:{type:"string"}, aciklama:{type:"string"}, marka:{type:"string"}, kategori:{type:"string"}, adet:{type:"integer"},
+    birim_fiyat_kdv_dahil:{type:"number"}, seri_nolar:{type:"array", items:{type:"string"}} } } } } };
+const FATURA_ISTEM = `Bu bir beyaz eşya bayisinin alış faturası (çoğunlukla Profilo/BSH). Faturadaki her ürün kalemini çıkar.
+- model: ürün/stok kodu (ör. CMG140DTR). Yoksa açıklamadaki model kodunu kullan.
+- aciklama: ürün adı. marka: faturada yazan marka, yoksa "Profilo". kategori: şunlardan biri: ${KATEGORI.join(", ")}.
+- birim_fiyat_kdv_dahil: bir adedin iskontolar düşülmüş, KDV eklenmiş net fiyatı = (satırın KDV hariç net tutarı + o satırın KDV'si) / adet. Kuruşa yuvarla.
+- seri_nolar: faturada seri numarası yazıyorsa o kalemin seri numaraları; yoksa boş liste.
+- Nakliye, hizmet gibi ürün olmayan satırları kalemlere koyma; varsa "not" alanında tutarıyla belirt.
+- Okuyamadığın ya da emin olmadığın şeyleri "not" alanına yaz. Uydurma.`;
+async function dosyaVeri(f){
+  if (f.type === "application/pdf") return { tip:"document", media:"application/pdf", data: await b64(f) };
+  const img = await new Promise((ok,no)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=no; i.src=URL.createObjectURL(f); });
+  const k = Math.min(1, 2000/Math.max(img.width,img.height)), c = document.createElement("canvas");
+  c.width = Math.round(img.width*k); c.height = Math.round(img.height*k); c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+  return { tip:"image", media:"image/jpeg", data: c.toDataURL("image/jpeg",0.85).split(",")[1] };
+}
+const b64 = f => new Promise(ok=>{ const r=new FileReader(); r.onload=()=>ok(String(r.result).split(",")[1]); r.readAsDataURL(f); });
+let SDK;
+async function claudeFatura(v){
+  SDK ||= (await import("https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.135.0/+esm")).default;
+  const client = new SDK({ apiKey: db.settings.apiKey, dangerouslyAllowBrowser: true });
+  const resp = await client.beta.messages.create({
+    model: "claude-opus-5-5", max_tokens: 16000,
+    betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
+    output_config: { effort: "medium", format: { type: "json_schema", schema: FATURA_SEMA } },
+    messages: [{ role:"user", content:[ { type:v.tip, source:{ type:"base64", media_type:v.media, data:v.data } }, { type:"text", text:FATURA_ISTEM } ] }]
+  });
+  if (resp.stop_reason === "refusal") throw new Error("Fatura okunamadı (istek reddedildi).");
+  if (resp.stop_reason === "max_tokens") throw new Error("Fatura çok uzun, yarım kaldı. Sayfa sayfa okutun.");
+  const t = resp.content.find(b=>b.type==="text"); if (!t) throw new Error("Cevap boş geldi.");
+  return JSON.parse(t.text);
+}
+async function faturaOku(f){
+  if (!db.settings.apiKey) { alert("Fatura okuma için Diğer → Ayarlar’a Claude API anahtarını girin."); return go("diger"); }
+  sheet(`<h2>Fatura okunuyor…</h2><div class="yuk"><span class="big">⏳</span><span>Kalemler çıkarılıyor, 20–60 saniye sürebilir.</span></div>`);
+  let r;
+  try { r = await claudeFatura(await dosyaVeri(f)); }
+  catch(e){ const m = e && e.status===401 ? "API anahtarı geçersiz." : e && e.status===429 ? "Çok sık istek; biraz sonra tekrar deneyin." : (e && e.message) || String(e);
+    sheet(`<h2>Fatura okunamadı</h2><div class="res neg">${esc(m)}</div><div class="muted" style="margin-top:8px">İnternet bağlantısını kontrol edin ya da elle giriş yapın.</div><button class="b" id="kapat">Tamam</button>`); $("#kapat").onclick=sheetKapat; return; }
+  faturaOnay(r);
+}
+function faturaOnay(r){
+  const k = r.kalemler.map(x=>({ ...x, al:true }));
+  const ciz = () => {
+    sheet(`<div class="row sp"><h2 style="margin:0">Faturayı kontrol edin</h2><button class="mini" id="kapat" style="flex:0 0 auto">Vazgeç</button></div>
+      <div class="row"><div><label>Fatura no</label><input id="ftNo" value="${esc(r.fatura_no)}"></div><div><label>Tarih</label><input id="ftTar" type="date" value="${/^\d{4}-\d{2}-\d{2}$/.test(r.tarih)?r.tarih:today()}"></div></div>
+      <label>Tedarikçi</label><input id="ftTed" value="${esc(r.tedarikci)}">
+      ${r.not?`<div class="res" style="background:var(--warnbg)"><b>Not:</b> ${esc(r.not)}</div>`:""}
+      ${k.map((x,i)=>{ const var_ = db.products.find(p=>normModel(p.model)===normModel(x.model));
+        return `<div class="satir ${x.al?"":"kapali"}" data-i="${i}">
+        <div class="row sp"><b>${i+1}. ${var_?'<span class="pill ok">kayıtlı ürün</span>':'<span class="pill warn">yeni ürün</span>'}</b><label style="flex:0 0 auto;margin:0"><input type="checkbox" data-k="al" ${x.al?"checked":""} style="width:auto"> stoğa al</label></div>
+        <div class="row"><div><label>Model</label><input data-k="model" value="${esc(x.model)}"></div><div style="flex:0 0 70px"><label>Adet</label><input data-k="adet" inputmode="numeric" value="${x.adet}"></div></div>
+        <label>Açıklama</label><input data-k="aciklama" value="${esc(x.aciklama)}">
+        <div class="row"><div><label>Birim fiyat (KDV dahil)</label><input data-k="birim_fiyat_kdv_dahil" inputmode="decimal" value="${virgul(x.birim_fiyat_kdv_dahil)}"></div><div><label>Kategori</label><input data-k="kategori" list="kategoriler" value="${esc(x.kategori)}"></div></div>
+        <label>Seri numaraları (her satıra bir)</label><textarea data-k="seri" style="min-height:44px">${esc((x.seri_nolar||[]).join("\n"))}</textarea>
+      </div>`; }).join("")}
+      <datalist id="kategoriler">${KATEGORI.map(m=>`<option value="${esc(m)}">`).join("")}</datalist>
+      <div id="ftTop"></div>
+      <button class="b" id="ftKay">Stoğa al</button>`);
+    const topla = () => { const s = k.filter(x=>x.al); $("#ftTop").innerHTML = `<div class="res"><div class="row sp"><span>${s.reduce((a,x)=>a+(+x.adet||0),0)} cihaz</span><b>${TL(s.reduce((a,x)=>a+(+x.adet||0)*num(x.birim_fiyat_kdv_dahil),0))}</b></div><div class="muted">Faturanın genel toplamıyla karşılaştırın.</div></div>`; };
+    document.querySelectorAll(".satir").forEach(d=>{ const x=k[d.dataset.i];
+      d.querySelectorAll("[data-k]").forEach(inp=>inp.oninput=inp.onchange=()=>{ const a=inp.dataset.k;
+        if (a==="al") { x.al=inp.checked; d.classList.toggle("kapali",!x.al); }
+        else if (a==="seri") x.seri_nolar=inp.value.split("\n").map(s=>s.trim()).filter(Boolean);
+        else if (a==="adet") x.adet=parseInt(inp.value)||0; else x[a]=inp.value;
+        topla(); }); });
+    topla();
+    $("#kapat").onclick=()=>{ if(confirm("Okunan fatura kaydedilmeden kapatılsın mı?")) sheetKapat(); };
+    $("#ftKay").onclick=()=>{
+      const s = k.filter(x=>x.al);
+      if (s.some(x=>!x.model.trim()||!num(x.birim_fiyat_kdv_dahil)||!(x.adet>0))) return alert("Stoğa alınacak her satırda model, adet ve birim fiyat dolu olmalı.");
+      const ortak = { gTarih:$("#ftTar").value, fatura:$("#ftNo").value.trim(), tedarikci:$("#ftTed").value.trim() };
+      let n=0; s.forEach(x=>{ const p=urunBulAc({ model:x.model, marka:x.marka, kategori:x.kategori, ad:x.aciklama }); const adet=Math.max(x.adet,(x.seri_nolar||[]).length);
+        cihazEkle(p, adet, x.seri_nolar||[], { ...ortak, alis:num(x.birim_fiyat_kdv_dahil) }); n+=adet; });
+      durum.sonTed = ortak.tedarikci; save(); sheetKapat(); toast(`${n} cihaz faturadan stoğa girdi`); go("stok");
+    };
+  };
+  ciz();
+}
+
+/* Kâr */
+function vKar(){
+  const aylar = [...new Set(db.units.filter(u=>u.satis).map(u=>u.satis.tarih.slice(0,7)))].sort().reverse();
+  const buAy = today().slice(0,7); if (!aylar.includes(buAy)) aylar.unshift(buAy);
+  durum.ay ||= buAy;
+  const sat = db.units.filter(u=>u.satis && (durum.ay==="hepsi" || u.satis.tarih.startsWith(durum.ay))).sort((a,b)=>b.satis.tarih.localeCompare(a.satis.tarih));
+  const H = sat.map(u=>[u,satisKar(u)]), T = k => r2(H.reduce((a,[,h])=>a+h[k],0));
+  const kat = {}; H.forEach(([u,h])=>{ const k=(P(u.pid)?.kategori)||"Diğer"; kat[k] ||= {n:0,kar:0,karP:0}; kat[k].n++; kat[k].kar+=h.kar; kat[k].karP+=h.karPrimli; });
+  const yil = today().slice(0,4), alimYil = db.units.filter(u=>u.gTarih.startsWith(yil)), primYil = r2(alimYil.reduce((a,u)=>a+primTutar(u),0)), alimTop = r2(alimYil.reduce((a,u)=>a+u.alis,0));
+  const ayAd = a => a==="hepsi" ? "Tümü" : new Date(a+"-01").toLocaleDateString("tr-TR",{month:"long",year:"numeric"});
+  main.innerHTML = `<select id="ay">${["hepsi",...aylar].map(a=>`<option value="${a}"${a===durum.ay?" selected":""}>${ayAd(a)}</option>`).join("")}</select>
+    <div class="stat" style="margin-top:10px">
+      <div class="card"><div class="muted">Net kâr</div><div class="big ${T("kar")<0?"neg":"pos"}">${TL(T("kar"))}</div></div>
+      <div class="card"><div class="muted">Prim düşünce kâr</div><div class="big pos">${TL(T("karPrimli"))}</div></div>
+      <div class="card"><div class="muted">Satılan cihaz</div><b class="big">${sat.length}</b></div>
+      <div class="card"><div class="muted">Ciro</div><b>${TL(T("tutar"))}</b></div>
+      <div class="card"><div class="muted">Maliyet</div><b>${TL(T("maliyet"))}</b></div>
+      <div class="card"><div class="muted">Komisyon + ek gider</div><b>${TL(T("kom")+T("gider"))}</b></div>
+    </div>
+    <div class="card" style="margin-top:10px"><div class="muted">${yil} alımları ve beklenen yıl sonu primi</div><div class="row sp"><span>Alım tutarı (${alimYil.length} cihaz)</span><b>${TL(alimTop)}</b></div><div class="row sp"><span>Beklenen prim</span><b class="pos">${TL(primYil)}</b></div></div>
+    ${Object.keys(kat).length?`<h2>Kategoriye göre</h2><div class="card"><table><tr><th>Kategori</th><th>Adet</th><th style="text-align:right">Kâr</th><th style="text-align:right">Primli</th></tr>${Object.entries(kat).sort((a,b)=>b[1].kar-a[1].kar).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.n}</td><td style="text-align:right" class="${v.kar<0?"neg":"pos"}">${TL(v.kar)}</td><td style="text-align:right">${TL(v.karP)}</td></tr>`).join("")}</table></div>`:""}
+    <h2>Satışlar</h2>
+    ${sat.length?`<div class="card list">${H.map(([u,h])=>`<div class="it tap" data-p="${u.pid}"><div class="row sp"><div><b>${esc(pAd(P(u.pid)))}</b><div class="muted">${trDate(u.satis.tarih)} · seri ${esc(u.seri||"—")} · ${ODEME[u.satis.odeme]||""}</div></div><div class="sag"><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b><div class="muted">${TL(u.satis.tutar)}</div></div></div></div>`).join("")}</div>`:`<div class="empty">Bu dönemde satış yok.</div>`}
+    <div class="muted" style="margin-top:8px">Tüm tutarlar KDV dahil. Kâr = satış − maliyet − kart komisyonu − ek gider. Primli kâr, cihazın yıl sonu primini de ekler.</div>`;
+  $("#ay").onchange=e=>{ durum.ay=e.target.value; vKar(); };
+  main.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
+}
+
+/* Diğer */
+function vDiger(){
+  const s = db.settings, son = (()=>{ try{ return localStorage.getItem(KEY+".yedek"); }catch(e){ return null; } })();
+  const yedekGun = son ? gun(son) : null;
+  main.innerHTML = `
+    ${yedekGun===null||yedekGun>7?`<div class="card" style="background:var(--warnbg)"><b>Yedek alın.</b> <span class="muted">Veriler yalnız bu telefonda duruyor. ${son?yedekGun+" gündür yedek alınmadı.":"Hiç yedek alınmadı."}</span></div>`:""}
+    <div class="card"><h3>Yedek</h3><div class="muted">Dosyayı “Dosyalar”a, iCloud Drive’a ya da kendinize maile kaydedin.</div>
+      <button class="b" id="yJson">Yedek al (tam yedek)</button>
+      <button class="b2" id="yXls" style="width:100%;margin-top:8px">Excel olarak indir</button>
+      <label>Yedekten geri yükle</label><input type="file" id="yYukle" accept=".json,application/json"></div>
+    <div class="card"><h3>Diva’dan satışları yükle</h3><div class="muted">Diva’nın günlük satış raporunu Excel olarak alın ve buradan seçin. Satışlar seri no ya da model koduyla stoktaki cihazlara eşlenir; aynı satır iki kez yüklenmez.</div>
+      <input type="file" id="satisDosya" accept=".xlsx,.xls,.csv,text/csv"></div>
+    <div class="card"><h3>Listeden yükle</h3><div class="muted">Mevcut stok listesi: Excel (.xlsx) ya da CSV. Sütunları siz eşleştirirsiniz.</div>
+      <input type="file" id="liste" accept=".xlsx,.xls,.csv,text/csv"></div>
+    <div class="card"><h3>Ayarlar</h3>
+      <div class="row"><div><label>Hedef kâr %</label><input id="aMarj" inputmode="decimal" value="${s.marj}"></div><div><label>Yıl sonu primi % (genel)</label><input id="aPrim" inputmode="decimal" value="${virgul(s.prim)}"></div></div>
+      <div class="muted">Ürüne özel prim oranı ürün düzenleme ekranından girilir.</div>
+      <label>Komisyon oranları %</label>
+      <div class="row">${Object.entries(ODEME).map(([k,v])=>`<div><div class="muted">${v}</div><input data-kom="${k}" inputmode="decimal" value="${virgul(s.kom[k])}"></div>`).join("")}</div>
+      <label>Claude API anahtarı (fatura okuma için)</label><input id="aKey" type="password" autocomplete="off" value="${esc(s.apiKey)}" placeholder="sk-ant-…">
+      <div class="muted">Anahtar yalnız bu telefonda saklanır; fatura görüntüsü okunmak için Anthropic’e gönderilir.</div>
+      <button class="b" id="aKay">Ayarları kaydet</button></div>
+    <div class="card muted">${db.products.length} ürün · ${db.units.length} cihaz kaydı · ${db.units.filter(u=>u.satis).length} satış</div>`;
+  $("#aKay").onclick=()=>{ s.marj=num($("#aMarj").value); s.prim=num($("#aPrim").value); s.apiKey=$("#aKey").value.trim(); durum.marj=s.marj; main.querySelectorAll("[data-kom]").forEach(i=>s.kom[i.dataset.kom]=num(i.value)); save(); toast("Kaydedildi"); };
+  $("#yJson").onclick=()=>{ const kopya = { ...db, settings:{ ...db.settings, apiKey:"" } };
+    indir(new Blob([JSON.stringify(kopya,null,1)],{type:"application/json"}), `bayi-defteri-yedek-${today()}.json`); try{ localStorage.setItem(KEY+".yedek", today()); }catch(e){} };
+  $("#yXls").onclick=excelIndir;
+  $("#yYukle").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
+    try { const d=JSON.parse(await f.text()); if(!d.products||!d.units) throw 0;
+      if(!confirm(`Yedekte ${d.products.length} ürün, ${d.units.length} cihaz var. Şu anki veriler bununla DEĞİŞTİRİLSİN mi?`)) return;
+      const key = db.settings.apiKey; db = d; normalize(); if (!db.settings.apiKey) db.settings.apiKey = key; save(); toast("Yedek yüklendi"); vDiger();
+    } catch(_) { alert("Bu dosya Bayi Defteri yedeği değil."); } };
+  $("#liste").onchange=e=>{ const f=e.target.files[0]; if(f) listeOku(f); e.target.value=""; };
+  $("#satisDosya").onchange=e=>{ const f=e.target.files[0]; if(f) satisOku(f); e.target.value=""; };
+}
+function indir(blob, ad){
+  const f = new File([blob], ad, {type:blob.type});
+  if (navigator.canShare && navigator.canShare({files:[f]})) { navigator.share({files:[f], title:ad}).catch(()=>{}); return; }
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=ad; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+function excelIndir(){
+  if (!window.XLSX) return alert("Excel modülü yüklenemedi. İnternete bağlıyken bir kez açın.");
+  const wb = XLSX.utils.book_new();
+  const satir = u => { const p=P(u.pid)||{}; return { Marka:p.marka, Kategori:p.kategori, Model:p.model, "Ürün adı":p.ad, "Seri no":u.seri, "Giriş tarihi":u.gTarih, Tedarikçi:u.tedarikci, "Fatura no":u.fatura,
+    "Alış (KDV dahil)":u.alis, "Ek maliyet":u.ekMaliyet||0, "Maliyet":maliyet(u), "Prim %":primOran(u), "Prim tutarı":primTutar(u), "Primli maliyet":primliMaliyet(u) }; };
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(db.units.filter(u=>!u.satis).map(u=>({...satir(u), "Stokta gün":gun(u.gTarih)}))), "Stok");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(db.units.filter(u=>u.satis).map(u=>{ const h=satisKar(u); return {...satir(u), "Satış tarihi":u.satis.tarih, "Ödeme":ODEME[u.satis.odeme], "Satış (KDV dahil)":h.tutar, Komisyon:h.kom, "Ek gider":h.gider, Kâr:h.kar, "Primli kâr":h.karPrimli, Müşteri:u.satis.musteri }; })), "Satışlar");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(db.products.map(p=>({ Marka:p.marka, Kategori:p.kategori, Model:p.model, "Ürün adı":p.ad, Barkod:p.barkod, "Liste fiyatı":p.liste, "Prim %":p.prim, Stokta:stoktaki(p.id).length }))), "Ürünler");
+  const out = XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  indir(new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), `bayi-defteri-${today()}.xlsx`);
+}
+
+/* Liste içe aktarma */
+const ALANLAR = [
+  ["model","Model kodu *"],["marka","Marka"],["kategori","Kategori"],["ad","Ürün adı"],["barkod","Barkod"],
+  ["liste","Liste fiyatı"],["alis","Alış fiyatı"],["prim","Yıl sonu primi %"],["adet","Stok adedi"],["seri","Seri no"],["tarih","Giriş tarihi"],["fatura","Fatura no"],["tedarikci","Tedarikçi"]
+];
+const TAHMIN = { model:/model|ürün kodu|urun kodu|stok kodu|kod/i, marka:/marka/i, kategori:/kategori|grup|cins/i, ad:/ad[ıi]|açıklama|aciklama|tanım|ürün$/i, barkod:/barkod|ean/i,
+  liste:/liste|satış fiyat|satis fiyat|psf|etiket/i, alis:/alış|alis|maliyet|bayi fiyat|net fiyat/i, prim:/prim/i, adet:/adet|miktar|stok$|stok adedi/i, seri:/seri/i, tarih:/tarih/i, fatura:/fatura/i, tedarikci:/tedarik|firma|cari/i };
+async function tabloOku(f){
+  let rows;
+  try {
+    if (/\.csv$/i.test(f.name)) { const t=await f.text(), ilk=t.split("\n")[0], ay=(ilk.match(/;/g)||[]).length>(ilk.match(/,/g)||[]).length?";":",";
+      rows = t.split(/\r?\n/).filter(l=>l.trim()).map(l=>{ const out=[]; let c="",q=false; for(const ch of l){ if(ch==='"') q=!q; else if(ch===ay&&!q){out.push(c);c="";} else c+=ch; } out.push(c); return out.map(x=>x.trim()); }); }
+    else { if(!window.XLSX) { alert("Excel modülü yüklenemedi. İnternete bağlıyken tekrar deneyin ya da CSV kullanın."); return null; }
+      const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:""}); }
+  } catch(e){ alert("Dosya okunamadı: "+e.message); return null; }
+  rows = rows.filter(r=>r.some(c=>String(c).trim()));
+  if (rows.length<2) { alert("Dosyada satır bulunamadı."); return null; }
+  let bas = rows.findIndex(r=>r.filter(c=>typeof c==="string"&&c.trim()).length>=2); if (bas<0) bas=0;
+  return { baslik: rows[bas].map((c,i)=>String(c).trim()||`Sütun ${i+1}`), veri: rows.slice(bas+1) };
+}
+const tarihOku = t => t instanceof Date ? t.toISOString().slice(0,10) : (/^\d{1,2}[./]\d{1,2}[./]\d{4}/.test(String(t).trim()) ? String(t).trim().slice(0,10).split(/[./]/).reverse().map(x=>x.padStart(2,"0")).join("-") : (/^\d{4}-\d{2}-\d{2}/.test(String(t)) ? String(t).slice(0,10) : ""));
+
+/* Diva satış raporu içe aktarma */
+const S_ALANLAR = [["model","Model / stok kodu *"],["seri","Seri no"],["tutar","Satış tutarı (satır toplamı)"],["adet","Adet"],["tarih","Tarih"],["belge","Fiş / fatura no"],["odeme","Ödeme şekli"],["musteri","Müşteri"]];
+const S_TAHMIN = { model:/model|stok kodu|ürün kodu|urun kodu|malzeme kodu|kod/i, seri:/seri/i, tutar:/tutar|toplam|net|fiyat/i, adet:/adet|miktar/i, tarih:/tarih/i, belge:/fiş|fis|fatura|belge|evrak/i, odeme:/ödeme|odeme|tahsilat/i, musteri:/müşteri|musteri|cari|unvan/i };
+const odemeTahmin = s => { s=String(s||"").toLocaleLowerCase("tr"); return /taksit/.test(s)?"taksit":/kart|kredi|pos/.test(s)?"kart":/havale|eft|banka/.test(s)?"havale":"nakit"; };
+async function satisOku(f){
+  const t = await tabloOku(f); if (!t) return;
+  const { baslik, veri } = t, es = {};
+  S_ALANLAR.forEach(([k])=>{ es[k]=baslik.findIndex((h,j)=>S_TAHMIN[k].test(h) && !Object.values(es).includes(j)); });
+  sheet(`<div class="row sp"><h2 style="margin:0">Satışları yükle</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(f.name)} · ${veri.length} satır. Sütunları kontrol edin.</div>
+    ${S_ALANLAR.map(([k,ad])=>`<label>${ad}</label><select data-es="${k}"><option value="-1">— yok —</option>${baslik.map((h,i)=>`<option value="${i}"${es[k]===i?" selected":""}>${esc(h)}</option>`).join("")}</select>`).join("")}
+    <h2>Satış tutarları</h2><div class="seg" id="sTip"><button data-v="dahil" class="on">KDV dahil</button><button data-v="haric">KDV hariç (%20 eklenecek)</button></div>
+    <div id="sOn"></div>
+    <button class="b" id="sKay">Satışları kaydet</button>`);
+  let tip = "dahil";
+  $("#kapat").onclick=sheetKapat;
+  $("#sTip").querySelectorAll("button").forEach(b=>b.onclick=()=>{ tip=b.dataset.v; $("#sTip").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); on(); });
+  const hazirla = () => {
+    const e={}; document.querySelectorAll("[data-es]").forEach(x=>e[x.dataset.es]=+x.value);
+    const g=(r,k)=>e[k]>=0?r[e[k]]:"", alinan=new Set(), es_=[], eslesmedi=[], zaten=[];
+    const once = new Set(db.units.filter(u=>u.satis&&u.satis.kaynak).map(u=>u.satis.kaynak));
+    veri.forEach((r,i)=>{
+      const model=String(g(r,"model")).trim(), seri=String(g(r,"seri")).trim(); if(!model&&!seri) return;
+      const adet=e.adet>=0?Math.max(1,Math.round(num(g(r,"adet")))):1, toplam=r2(num(g(r,"tutar"))*(tip==="haric"?1.2:1));
+      const tarih=tarihOku(g(r,"tarih"))||today(), belge=String(g(r,"belge")).trim();
+      for (let k=0;k<adet;k++){
+        const kaynak=[belge||tarih,normModel(model),seri,k].join("|");
+        if (once.has(kaynak)) { zaten.push(model||seri); continue; }
+        let u = seri && db.units.find(x=>!x.satis && !alinan.has(x.id) && x.seri===seri);
+        if (!u && model) u = db.units.filter(x=>!x.satis && !alinan.has(x.id) && normModel(P(x.pid)?.model)===normModel(model)).sort((a,b)=>a.gTarih.localeCompare(b.gTarih))[0];
+        if (!u) { eslesmedi.push(`${model||"—"}${seri?" ("+seri+")":""}`); continue; }
+        alinan.add(u.id);
+        es_.push({ u, satis:{ tarih, tutar:r2(toplam/adet), odeme:odemeTahmin(g(r,"odeme")), gider:0, musteri:String(g(r,"musteri")).trim(), not:belge?"Diva "+belge:"Diva", kaynak } });
+      }
+    });
+    es_.forEach(x=>{ x.satis.komOran=db.settings.kom[x.satis.odeme]||0; x.satis.kom=r2(x.satis.tutar*x.satis.komOran/100); });
+    return { es:es_, eslesmedi, zaten };
+  };
+  const on = () => { const h=hazirla(), kar=h.es.reduce((a,x)=>a+satisHesap(x.u,x.satis).kar,0);
+    $("#sOn").innerHTML=`<div class="res"><b>${h.es.length} satış</b> stoktaki cihazla eşleşti · toplam kâr ${TL(kar)}${h.zaten.length?`<br><span class="muted">${h.zaten.length} satır daha önce yüklenmiş, atlanacak</span>`:""}</div>
+      ${h.eslesmedi.length?`<div class="res neg"><b>${h.eslesmedi.length} satır eşleşmedi</b> (stokta yok ya da model kodu farklı):<br><span class="muted">${esc(h.eslesmedi.slice(0,15).join(", "))}${h.eslesmedi.length>15?" …":""}</span></div>`:""}`; };
+  document.querySelectorAll("[data-es]").forEach(x=>x.onchange=on); on();
+  $("#sKay").onclick=()=>{ const h=hazirla(); if(!h.es.length) return alert("Eşleşen satış yok.");
+    h.es.forEach(x=>x.u.satis=x.satis); save(); sheetKapat(); toast(`${h.es.length} satış kaydedildi`); go("kar"); };
+}
+
+async function listeOku(f){
+  let rows;
+  try {
+    if (/\.csv$/i.test(f.name)) { const t=await f.text(), ilk=t.split("\n")[0], ay=(ilk.match(/;/g)||[]).length>(ilk.match(/,/g)||[]).length?";":",";
+      rows = t.split(/\r?\n/).filter(l=>l.trim()).map(l=>{ const out=[]; let c="",q=false; for(const ch of l){ if(ch==='"') q=!q; else if(ch===ay&&!q){out.push(c);c="";} else c+=ch; } out.push(c); return out.map(x=>x.trim()); }); }
+    else { if(!window.XLSX) return alert("Excel modülü yüklenemedi. İnternete bağlıyken tekrar deneyin ya da CSV kullanın.");
+      const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:""}); }
+  } catch(e){ return alert("Dosya okunamadı: "+e.message); }
+  rows = rows.filter(r=>r.some(c=>String(c).trim()));
+  if (rows.length<2) return alert("Dosyada satır bulunamadı.");
+  let bas = rows.findIndex(r=>r.filter(c=>typeof c==="string"&&c.trim()).length>=2); if (bas<0) bas=0;
+  const baslik = rows[bas].map((c,i)=>String(c).trim()||`Sütun ${i+1}`), veri = rows.slice(bas+1);
+  const es = {}; ALANLAR.forEach(([k])=>{ es[k]=baslik.findIndex((h,j)=>TAHMIN[k].test(h) && !Object.values(es).includes(j)); });
+  sheet(`<div class="row sp"><h2 style="margin:0">Listeden yükle</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(f.name)} · ${veri.length} satır. Her alanın hangi sütundan geleceğini seçin.</div>
+    ${ALANLAR.map(([k,ad])=>`<label>${ad}</label><select data-es="${k}"><option value="-1">— yok —</option>${baslik.map((h,i)=>`<option value="${i}"${es[k]===i?" selected":""}>${esc(h)}</option>`).join("")}</select>`).join("")}
+    <h2>Alış fiyatları</h2><div class="seg" id="lTip"><button data-v="dahil" class="on">KDV dahil</button><button data-v="haric">KDV hariç (%20 eklenecek)</button></div>
+    <label>Listede marka yoksa</label><input id="lMarka" value="Profilo">
+    <div id="lOn"></div>
+    <button class="b" id="lKay">Yükle</button>`);
+  let tip="dahil";
+  const fiyat = v => r2(num(v) * (tip==="haric" ? 1.2 : 1));
+  $("#kapat").onclick=sheetKapat;
+  $("#lTip").querySelectorAll("button").forEach(b=>b.onclick=()=>{ tip=b.dataset.v; $("#lTip").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b)); on(); });
+  const esOku = () => { const o={}; document.querySelectorAll("[data-es]").forEach(x=>o[x.dataset.es]=+x.value); return o; };
+  const hazirla = () => {
+    const e=esOku(), g=(r,k)=>e[k]>=0?r[e[k]]:"", yeniP=new Map(), birim=[]; let atla=0;
+    veri.forEach(r=>{
+      const model=String(g(r,"model")).trim(); if(!model){ atla++; return; }
+      const anahtar=normModel(model);
+      if(!yeniP.has(anahtar)) yeniP.set(anahtar,{ marka:String(g(r,"marka")).trim()||$("#lMarka").value.trim(), model, kategori:String(g(r,"kategori")).trim(), ad:String(g(r,"ad")).trim(), barkod:String(g(r,"barkod")).trim(), liste:fiyat(g(r,"liste"))||null, prim:e.prim>=0&&String(g(r,"prim")).trim()!==""?num(g(r,"prim")):null });
+      const alis=fiyat(g(r,"alis")), seri=String(g(r,"seri")).trim();
+      let tarih=g(r,"tarih"); tarih = tarih instanceof Date ? tarih.toISOString().slice(0,10) : (/^\d{1,2}[./]\d{1,2}[./]\d{4}$/.test(String(tarih).trim()) ? String(tarih).trim().split(/[./]/).reverse().map(x=>x.padStart(2,"0")).join("-") : today());
+      const n = seri ? 1 : (e.adet>=0 ? Math.max(0, Math.round(num(g(r,"adet")))) : (alis?1:0));
+      if (alis && n) birim.push({ anahtar, n, seri, alis, tarih, fatura:String(g(r,"fatura")).trim(), tedarikci:String(g(r,"tedarikci")).trim() });
+    });
+    return { yeniP, birim, atla };
+  };
+  const on = () => { const h=hazirla(), mevcut=[...h.yeniP.keys()].filter(k=>db.products.some(p=>normModel(p.model)===k)).length, n=h.birim.reduce((a,b)=>a+b.n,0);
+    $("#lOn").innerHTML=`<div class="res"><b>${h.yeniP.size} ürün</b> (${h.yeniP.size-mevcut} yeni, ${mevcut} zaten kayıtlı)<br><b>${n} cihaz</b> stoğa girecek${h.atla?`<br><span class="muted">${h.atla} satırda model yok, atlanacak</span>`:""}${h.birim.length?`<br><span class="muted">İlk cihaz maliyeti: ${TL(h.birim[0].alis)}</span>`:""}</div>`; };
+  document.querySelectorAll("[data-es]").forEach(x=>x.onchange=on); $("#lMarka").oninput=on; on();
+  $("#lKay").onclick=()=>{
+    if(+document.querySelector('[data-es="model"]').value<0) return alert("Model kodu sütununu seçin.");
+    const h=hazirla(), idler={};
+    h.yeniP.forEach((v,k)=>{ const p=urunBulAc(v); for(const a in v) if(v[a]!=null && v[a]!=="") p[a]=v[a]; idler[k]=p; });
+    let n=0; h.birim.forEach(b=>{ cihazEkle(idler[b.anahtar], b.n, b.seri?[b.seri]:[], { gTarih:b.tarih, alis:b.alis, fatura:b.fatura, tedarikci:b.tedarikci }); n+=b.n; });
+    save(); sheetKapat(); toast(`${h.yeniP.size} ürün, ${n} cihaz yüklendi`); go("stok");
+  };
+}
+
+/* Alt pencere */
+function sheet(html){ $("#sheet").innerHTML=`<div class="sheet"><div>${html}</div></div>`; document.body.style.overflow="hidden"; }
+function sheetKapat(){ $("#sheet").innerHTML=""; document.body.style.overflow=""; }
+
+/* Başlat */
+load(); save(); go("fiyat");
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+if ("serviceWorker" in navigator && location.protocol!=="file:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
