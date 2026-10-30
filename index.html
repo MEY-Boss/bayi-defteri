@@ -108,6 +108,7 @@ body.sepetli main{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
+const SURUM = "v13 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
@@ -615,7 +616,7 @@ function vDiger(){
       <label>Claude API anahtarı (fatura fotoğrafı okuma için; e-fatura PDF’i anahtarsız okunur)</label><input id="aKey" type="password" autocomplete="off" value="${esc(s.apiKey)}" placeholder="sk-ant-…">
       <div class="muted">Anahtar yalnız bu telefonda saklanır; fatura görüntüsü okunmak için Anthropic’e gönderilir.</div>
       <button class="b" id="aKay">Ayarları kaydet</button></div>
-    <div class="card"><div class="muted">${db.products.length} ürün · ${db.units.length} cihaz kaydı · ${db.units.filter(u=>u.satis).length} satış</div>
+    <div class="card"><div class="row sp"><span class="muted">${db.products.length} ürün · ${db.units.length} cihaz kaydı · ${db.units.filter(u=>u.satis).length} satış</span><span class="pill">${SURUM}</span></div>
       <button class="b2 red" id="hepsiSil" style="width:100%;margin-top:8px">Bütün ürün, stok ve satış kayıtlarını sil</button>
       <div class="muted">Ayarlar ve fiyat listeleri silinmez. Silmeden önce yedek almanız önerilir.</div></div>`;
   $("#hepsiSil").onclick=()=>{ if (!db.products.length && !db.units.length) return toast("Silinecek kayıt yok");
