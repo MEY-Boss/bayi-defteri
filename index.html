@@ -108,7 +108,7 @@ body.sepetli main{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v13 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v14 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
@@ -121,6 +121,8 @@ function normalize(){
   if (!db.settings.prim6) { if (!num(db.settings.prim)) db.settings.prim = 6; db.settings.prim6 = true; } // 30.10: Profilo yıl sonu primi %6
   db.kampanyalar.forEach(k=>{ if (k.haricSon===undefined && k.gruplar.length===1 && k.gruplar[0].kat.includes("Buzdolabı")) k.haricSon = ["76","86"]; });
   /* 30.10: stok dökümünden "Küçük ev aleti" diye girilmiş buzdolabı vb. kategorileri düzelt */
+  /* 30.10: portal dökümünde "ÇAMAŞIR KURUTMA MAKİNESİ" çamaşır makinesi sayılmıştı */
+  db.products.forEach(p=>{ if (p.kategori==="Çamaşır makinesi") { const k = db.katalog[normModel(p.model)]?.kategori; if (k==="Kurutma makinesi" || (!k && listeKategori(p.ad||"")==="Kurutma makinesi")) p.kategori = "Kurutma makinesi"; } });
   db.products.forEach(p=>{ if (p.kategori==="Küçük ev aleti") { const k = db.katalog[normModel(p.model)]?.kategori || listeKategori(p.ad||""); if (k && k!=="Küçük ev aleti") p.kategori = k; } });
   if ((db.v||1) < 2) { // v1: KDV hariç tutuluyordu → KDV dahile çevir
     db.units.forEach(u=>{ const o=1+(u.kdv??20)/100;
@@ -648,7 +650,7 @@ function vDiger(){
 /* Profilo toptan fiyat listesi: her sayfada "Ürün" başlık satırı, B sütunu model, "fiyat" geçen ilk iki sütun nakit/vadeli */
 const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 function listeKategori(s){ s = s.toLocaleUpperCase("tr");
-  const t = [[/TELEVİZYON|\bTV\b|QLED|OLED/,"Televizyon"],[/ISI POMPALI/,"Kurutma makinesi"],[/KULAKLIK/,"Küçük ev aleti"],[/MİKRODALGA/,"Mikrodalga fırın"],[/BUZDOLA[BP]/,"Buzdolabı"],[/DERİN DONDURUCU/,"Derin dondurucu"],[/ÇAMAŞIR/,"Çamaşır makinesi"],[/KURUTMA/,"Kurutma makinesi"],[/BULAŞIK/,"Bulaşık makinesi"],[/FIRIN/,"Fırın"],[/OCAK/,"Ocak"],[/DAVLUMBAZ|ASPİRATÖR/,"Davlumbaz"],[/KLİMA|ÜNİTE|BTU/,"Klima"],[/SÜPÜRGE|TORBA/,"Süpürge"],[/SET/,"Ankastre set"],[/SEBİL/,"Su sebili"]];
+  const t = [[/TELEVİZYON|\bTV\b|QLED|OLED/,"Televizyon"],[/ISI POMPALI/,"Kurutma makinesi"],[/KULAKLIK/,"Küçük ev aleti"],[/MİKRODALGA/,"Mikrodalga fırın"],[/BUZDOLA[BP]/,"Buzdolabı"],[/DERİN DONDURUCU/,"Derin dondurucu"],[/KURUTMALI/,"Çamaşır makinesi"],[/KURUTMA/,"Kurutma makinesi"],[/ÇAMAŞIR/,"Çamaşır makinesi"],[/BULAŞIK/,"Bulaşık makinesi"],[/FIRIN/,"Fırın"],[/OCAK/,"Ocak"],[/DAVLUMBAZ|ASPİRATÖR/,"Davlumbaz"],[/KLİMA|ÜNİTE|BTU/,"Klima"],[/SÜPÜRGE|TORBA/,"Süpürge"],[/SET/,"Ankastre set"],[/SEBİL/,"Su sebili"]];
   for (const [r,k] of t) if (r.test(s)) return k; return "Küçük ev aleti"; }
 function profiloListesiCoz(wb){
   const sayfalar = [], k = {}, kat = {}; let tarih = "", kdvDahil = true;
