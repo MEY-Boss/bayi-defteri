@@ -117,6 +117,7 @@ function load(){
 function normalize(){
   const d = BOS(); db.settings = Object.assign(d.settings, db.settings||{}); db.settings.kom = Object.assign(d.settings.kom, db.settings.kom||{}); db.settings.taksit = Object.assign(d.settings.taksit, db.settings.taksit||{});
   db.products ||= []; db.units ||= []; db.listeler ||= []; db.katalog ||= {}; db.kampanyalar ||= []; db.sepet ||= [];
+  db.kampanyalar.forEach(k=>{ if (k.haricSon===undefined && k.gruplar.length===1 && k.gruplar[0].kat.includes("Buzdolabı")) k.haricSon = ["76","86"]; });
   /* 30.10: stok dökümünden "Küçük ev aleti" diye girilmiş buzdolabı vb. kategorileri düzelt */
   db.products.forEach(p=>{ if (p.kategori==="Küçük ev aleti") { const k = db.katalog[normModel(p.model)]?.kategori || listeKategori(p.ad||""); if (k && k!=="Küçük ev aleti") p.kategori = k; } });
   if ((db.v||1) < 2) { // v1: KDV hariç tutuluyordu → KDV dahile çevir
@@ -980,7 +981,7 @@ function kampanyaKural(baslik, ad, aciklama){
   if (/kurutma/.test(t) && /çamaşır/.test(t)) return { gruplar:[{ ad:"Kurutma makinesi", kat:["Kurutma makinesi"], modeller:[], adet:1 }, { ad:"Çamaşır makinesi", kat:["Çamaşır makinesi"], modeller:[], adet:1 }], haricXL:false };
   if (/televizyon|\btv\b/.test(b)) return { gruplar:[{ ad:"Televizyon", kat:[], modeller:[], adet:1 }, { ad:"Hediye Türk kahve makinesi", kat:[], modeller:[], adet:1 }], haricXL:false };
   if (/ankastre|\bset\b/.test(b)) return { gruplar:[{ ad:"Fırın", kat:["Fırın"], modeller:[], adet:1 }, { ad:"Ocak / davlumbaz", kat:["Ocak","Davlumbaz"], modeller:[], adet:1, enFazla:2 }], haricXL:false };
-  return { gruplar:[{ ad:"Beyaz eşya", kat:LDA, modeller:[], adet:2 }], haricXL:/\bxx?l\b/.test(t) };
+  return { gruplar:[{ ad:"Beyaz eşya", kat:LDA, modeller:[], adet:2 }], haricXL:/\bxx?l\b/.test(t), haricSon:["76","86"] }; // MEY 30.10: numarası 76/86 ile biten buzdolapları bundle'a girmez
 }
 const MODEL_KOD = /^[A-ZÇĞİÖŞÜ]{2,}[A-Z0-9]*\d[A-Z0-9]*$/;
 function kampanyaCoz(bl){
@@ -1026,6 +1027,7 @@ function kampanyaOnay(ks, duzenle){
           <label>Kategoriler (virgülle)</label><input data-g="${j}" data-gk="kat" value="${esc(g.kat.join(", "))}" list="kategoriler">
           <label>Model listesi (boşluk ya da satırla ayırın)</label><textarea data-g="${j}" data-gk="modeller" style="min-height:44px" placeholder="${g.kat.length?"Boş bırakılırsa kategorideki tüm modeller":"Dokümandaki resimden modelleri yazın"}">${esc(g.modeller.join(" "))}</textarea></div>`).join("")}
         ${k.haricXL?`<div class="muted">XL / XXL modeller hariç tutulur.</div>`:""}
+        ${k.gruplar.some(g=>g.kat.includes("Buzdolabı"))?`<label>Kampanyaya girmeyen buzdolapları — model numarası şununla bitenler (virgülle)</label><input data-k="haricSon" value="${esc((k.haricSon||[]).join(", "))}" placeholder="76, 86">`:""}
         ${kampanyaEksik(k)?`<div class="res neg">${esc(kampanyaEksik(k))}</div>`:""}
       </div>`).join("")}
       <datalist id="kategoriler">${KATEGORI.map(m=>`<option value="${esc(m)}">`).join("")}</datalist>
@@ -1034,6 +1036,7 @@ function kampanyaOnay(ks, duzenle){
     document.querySelectorAll(".satir").forEach(d=>{ const k = ks[d.dataset.i];
       d.querySelectorAll("[data-k]").forEach(inp=>inp.oninput=inp.onchange=()=>{ const a=inp.dataset.k;
         if (a==="aktif") { k.aktif=inp.checked; d.classList.toggle("kapali",!k.aktif); }
+        else if (a==="haricSon") k.haricSon = inp.value.split(/[\s,;]+/).filter(Boolean);
         else if (a==="primHaric") { k.primHaric=r2(num(inp.value)); k.prim=r2(k.primHaric*1.2); d.querySelector('[data-goster="prim"]').value=TL(k.prim); }
         else k[a]=inp.value; });
       d.querySelectorAll("[data-g]").forEach(inp=>inp.oninput=()=>{ const g=k.gruplar[inp.dataset.g];
@@ -1049,12 +1052,15 @@ function kampanyaOnay(ks, duzenle){
 }
 /* Eşleştirme */
 const xlMi = p => /\bXX?L\b/.test(db.katalog[normModel(p?.model)]?.grup || "");
+/* Kampanyaya girmeyen buzdolapları: model numarası (ör. BD2076WENN → 2076) verilen eklerle bitenler */
+const haricBuz = (k, p) => !!p && p.kategori==="Buzdolabı" && (k.haricSon||[]).some(e=>e && ((String(p.model).match(/\d+/)||[""])[0]).endsWith(e));
+const kampanyaDisi = (k, p) => (k.haricXL && xlMi(p)) || haricBuz(k, p);
 function grupUyar(g, u){ const p = P(u.pid); if (!p) return false;
   if (g.modeller.length) return g.modeller.some(m=>normModel(m)===normModel(p.model));
   if (trk(p.marka||"Profilo")!=="profilo") return false; // Profilo kampanyası: kategoriyle eşleşmede yalnız Profilo ürünleri
   return g.kat.includes(p.kategori); }
 function kampanyaUyar(k, us){
-  if (k.haricXL && us.some(u=>xlMi(P(u.pid)))) return false;
+  if (us.some(u=>kampanyaDisi(k, P(u.pid)))) return false;
   const kalan = [...us];
   for (const g of [...k.gruplar].sort((a,b)=>b.modeller.length-a.modeller.length)){
     let al = 0; for (let i=kalan.length-1; i>=0 && al<(g.enFazla||g.adet); i--) if (grupUyar(g,kalan[i])) { kalan.splice(i,1); al++; }
@@ -1062,7 +1068,7 @@ function kampanyaUyar(k, us){
   }
   return kalan.length===0;
 }
-const urunKampanyalari = u => aktifKampanyalar().filter(k=>!(k.haricXL && xlMi(P(u.pid))) && k.gruplar.some(g=>grupUyar(g,u)));
+const urunKampanyalari = u => aktifKampanyalar().filter(k=>!kampanyaDisi(k, P(u.pid)) && k.gruplar.some(g=>grupUyar(g,u)));
 function kampanyaKutu(u){
   const l = urunKampanyalari(u); if (!l.length) return "";
   return `<div class="card" style="background:var(--okbg)"><h3>Bu ürün kampanyaya girer</h3>${l.map(k=>`<div class="row sp" style="margin-top:6px"><div><b>${esc(k.ad)}</b><div class="muted">${k.gruplar.map(g=>esc(g.ad)+(g.adet>1?" ×"+g.adet:"")).join(" + ")} · bayi primi +${TL(k.prim)}</div></div><button class="mini" data-kmp="${k.id}" data-u="${u.id}" style="flex:0 0 auto">Kampanyalı sat</button></div>`).join("")}</div>`;
