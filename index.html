@@ -119,6 +119,14 @@ details.acc>summary::after{content:"";flex:0 0 auto;width:8px;height:8px;border-
 details.acc[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
 details.acc>div{padding:0 16px 16px}
 details.acc>div>.muted:first-child{margin-top:-4px}
+nav button .i{position:relative}
+.rozet{position:absolute;top:-3px;right:2px;min-width:18px;height:18px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:800;display:none;place-items:center;padding:0 5px;line-height:18px}
+.rozet.var{display:grid}
+.fab{position:fixed;right:18px;bottom:calc(80px + env(safe-area-inset-bottom));width:60px;height:60px;border-radius:30px;border:0;background:var(--brand);color:var(--brandInk);font-size:32px;line-height:1;box-shadow:var(--sh2);z-index:8}
+.fab:active{transform:scale(.94)}
+.fis{padding:18px}
+.fis hr{border:0;border-top:1.5px dashed var(--line);margin:10px 0}
+@media print{ header,nav,.fab,#sheet,.toast,main>*:not(#fis){display:none!important} body,html{background:#fff} main{padding:0} #fis{box-shadow:none;color:#000} #fis .muted{color:#444} }
 /* Kısayollar */
 .cips{display:flex;gap:7px;overflow-x:auto;margin:10px -16px 0;padding:0 16px 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .cips::-webkit-scrollbar{display:none}
@@ -148,7 +156,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 <nav id="nav">
   <button data-t="fiyat"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></span>Fiyat Ver</button>
   <button data-t="stok"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg></span>Stok</button>
-  <button data-t="giris"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>Giriş</button>
+  <button data-t="sepet"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3.5h2.6l2.3 11.2a1.8 1.8 0 0 0 1.8 1.4h8.4a1.8 1.8 0 0 0 1.7-1.3L21 7.5H6"/></svg><b class="rozet" id="rozet"></b></span>Sepet</button>
   <button data-t="kar"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 15l4-4 3 3 5-6"/><path d="M14 8h4v4"/></svg></span>Kâr</button>
   <button data-t="diger"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></span>Ayarlar</button>
 </nav>
@@ -159,7 +167,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v19 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v20 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
@@ -259,9 +267,9 @@ function toast(t){ const d=document.createElement("div"); d.className="toast"; d
 const $ = s => document.querySelector(s);
 const main = $("#main");
 let tab = "fiyat", durum = { q:"", pid:null, marj:null, odeme:"kart" };
-const BASLIK = { fiyat:"Fiyat Ver", stok:"Stok", giris:"Ürün Girişi", kar:"Kâr", diger:"Ayarlar" };
-function go(t){ tab=t; $("#title").textContent=BASLIK[t]; $("#firmaAd").textContent = db.settings.firma || "Bayi Defteri"; document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t)); render(); window.scrollTo(0,0); }
-function render(){ ({fiyat:vFiyat, stok:vStok, giris:vGiris, kar:vKar, diger:vDiger})[tab](); sepetBar();
+const BASLIK = { fiyat:"Fiyat Ver", stok:"Stok", giris:"Stok Girişi", sepet:"Sepet", kar:"Kâr", diger:"Ayarlar" };
+function go(t){ tab=t; $("#title").textContent=BASLIK[t]; $("#firmaAd").textContent = db.settings.firma || "Bayi Defteri"; document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===(t==="giris"?"stok":t))); render(); window.scrollTo(0,0); }
+function render(){ ({fiyat:vFiyat, stok:vStok, giris:vGiris, sepet:vSepet, kar:vKar, diger:vDiger})[tab](); sepetBar();
   const y = tab!=="diger" ? yedekUyari() : ""; if (y) { main.insertAdjacentHTML("afterbegin", y); $("#hizliYedek").onclick=()=>{ yedekAl(); render(); }; } }
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.t));
 const aramaKutusu = ph => `<input id="q" type="search" placeholder="${ph}" value="${esc(durum.q)}" autocomplete="off">`;
@@ -332,7 +340,7 @@ function vFiyat(){
     $("#marj").onchange=e=>{ durum.marj=num(e.target.value); detay(p); };
     $("#od").onchange=e=>{ durum.odeme=e.target.value; detay(p); };
     el.querySelectorAll("[data-sat]").forEach(b=>b.onclick=()=>hemenSat(b.dataset.sat, +b.dataset.f));
-    el.querySelectorAll("[data-kmp]").forEach(b=>b.onclick=()=>kampanyaSatis(b.dataset.kmp, b.dataset.u));
+    el.querySelectorAll("[data-kmp]").forEach(b=>b.onclick=()=>{ const u = db.units.find(x=>x.id===b.dataset.u); hemenSat(u.id, fiyatIcin(netMaliyet(u), durum.marj, s.kom.nakit||0)); }); // sepette "eklenirse +prim" önerisi çıkar
     el.querySelectorAll("[data-sepet]").forEach(b=>b.onclick=()=>sepeteEkle(b.dataset.sepet.split(","), +b.dataset.f));
     if (st.length) taksitCiz($("#taksitAlan"), p, fiyatIcin(netMaliyet(st[0]), durum.marj, s.kom.nakit||0));
   }
@@ -343,8 +351,9 @@ const satisKar = u => satisHesap(u, { tutar:u.satis.tutar, komOran:u.satis.komOr
 
 /* Stok */
 function vStok(){
-  main.innerHTML = `${aramaKutusu("Ara…")}<div class="row" style="margin-top:8px"><div class="seg" id="filt"><button data-v="stok">Stokta</button><button data-v="eksik">Maliyeti eksik${eksikler().length?` (${eksikler().length})`:""}</button><button data-v="hepsi">Tümü</button></div></div><div id="ozetS" style="margin-top:10px"></div><div id="liste"></div>`;
+  main.innerHTML = `<button class="fab" id="stokEkle" aria-label="Stok girişi">＋</button>${aramaKutusu("Ara…")}<div class="row" style="margin-top:8px"><div class="seg" id="filt"><button data-v="stok">Stokta</button><button data-v="eksik">Maliyeti eksik${eksikler().length?` (${eksikler().length})`:""}</button><button data-v="hepsi">Tümü</button></div></div><div id="ozetS" style="margin-top:10px"></div><div id="liste"></div>`;
   durum.filt ||= "stok";
+  $("#stokEkle").onclick=()=>{ durum.girisPid=null; durum.girisAlis=null; go("giris"); };
   $("#filt").querySelectorAll("button").forEach(b=>{ b.classList.toggle("on",b.dataset.v===durum.filt); b.onclick=()=>{ durum.filt=b.dataset.v; vStok(); }; });
   aramaBagla(liste); liste();
   function liste(){
@@ -457,7 +466,7 @@ function cihazEkle(p, n, seriler, ortak){
 /* Giriş */
 function vGiris(){
   const secili = durum.girisPid && P(durum.girisPid);
-  main.innerHTML = `
+  main.innerHTML = `<button class="b2" id="geriStok" style="margin-bottom:12px">← Stoka dön</button>
     <div class="card" style="background:var(--brand2)"><h3>Faturadan giriş</h3><div class="muted">Faturanın fotoğrafını çekin ya da e-fatura PDF’ini seçin; kalemler okunur, siz kontrol edip stoğa alırsınız.</div>
       <button class="b" id="fBtn">📷 Faturayı okut</button><input type="file" id="fDosya" accept="image/*,application/pdf" class="hide"></div>
     <h2>Elle giriş</h2>
@@ -482,6 +491,7 @@ function vGiris(){
     </div>
     <div id="gTop"></div>
     <button class="b" id="gKay">Girişi kaydet</button>`;
+  $("#geriStok").onclick=()=>go("stok");
   $("#fBtn").onclick=()=>$("#fDosya").click();
   $("#fDosya").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; if(f) faturaOku(f); };
   const top = () => { const seri=$("#gSeri").value.split("\n").map(x=>x.trim()).filter(Boolean), n=seri.length||Math.max(1,parseInt($("#gAdet").value)||1), a=num($("#gAlis").value)+num($("#gEk").value);
@@ -1362,14 +1372,10 @@ function sepetTemizle(){ db.sepet = sepet().filter(x=>{ const u = db.units.find(
 function sepeteEkle(ids, fiyat){
   const ici = new Set(sepet().map(x=>x.id)), id = ids.find(i=>!ici.has(i) && !db.units.find(u=>u.id===i)?.satis);
   if (!id) return toast("Bu üründen stoktaki bütün cihazlar zaten sepette");
-  sepet().push({ id, fiyat:r2(fiyat) }); save(); toast(`Sepete eklendi · ${sepet().length} ürün`); render();
+  sepet().push({ id, fiyat:r2(fiyat) }); durum.fis = null; save(); toast(`Sepete eklendi · ${sepet().length} ürün`); render();
 }
-function sepetBar(){
-  sepetTemizle(); let el = $("#sepetBar"); if (!el) { el = document.createElement("div"); el.id = "sepetBar"; document.body.appendChild(el); }
-  const n = sepet().length; document.body.classList.toggle("sepetli", !!n);
-  el.innerHTML = n ? `<button class="b" id="sepetAc">🛒 Sepet · ${n} ürün · ${TL(sepet().reduce((a,x)=>a+num(x.fiyat),0))}</button>` : "";
-  if (n) $("#sepetAc").onclick = sepetAc;
-}
+function sepetBar(){ // alt menüdeki Sepet simgesinde ürün sayısı
+  sepetTemizle(); const n = sepet().length, r = $("#rozet"); if (r) { r.textContent = n; r.classList.toggle("var", !!n); } }
 /* l içinden boyu min–max arası, ok() sağlayan ilk alt küme (büyükten küçüğe) */
 function altKume(l, min, max, ok){
   const n = l.length;
@@ -1392,7 +1398,7 @@ function sepetKampanyalari(us){
   return sonuc;
 }
 /* Tek ürün satışı da sepetten yapılır: ürün sepete girer, sepet açılır */
-function hemenSat(id, fiyat){ if (!sepet().some(x=>x.id===id)) { sepet().push({ id, fiyat:r2(fiyat) }); save(); } sheetKapat(); render(); sepetAc(); }
+function hemenSat(id, fiyat){ if (!sepet().some(x=>x.id===id)) { sepet().push({ id, fiyat:r2(fiyat) }); save(); } sheetKapat(); durum.fis = null; go("sepet"); }
 /* Stokta olmayan ürün (Profilo dışı markalar vb.): ürün açılır, tek cihaz eklenip sepete konur */
 function stoksuzEkle(v){
   const mk = v.marka||"Diğer"; if (trk(v.model).startsWith(trk(mk)+" ")) v = { ...v, model:v.model.slice(mk.length+1).trim() }; // "ALTUS AL KM 1160" → "AL KM 1160"
@@ -1404,11 +1410,11 @@ const PERSONEL = () => (db.settings.personel || []).filter(Boolean);
 const tlKisa = n => (+n||0).toLocaleString("tr-TR",{maximumFractionDigits:2});
 function sepetAc(){
   const s = db.settings;
-  const st = { bid:s.sonKart||"tek", n:"2", kart:null, havale:"", havaleBanka:s.sonHavaleBanka||"", kapali:new Set(), aile:new Set(), tarih:today(), musteri:"", tel:"", belge:"", personel:s.sonPersonel||"", gider:"", not:"", yeni:false };
+  const st = durum.sepetSt ||= { bid:s.sonKart||"tek", n:"2", kart:null, havale:"", havaleBanka:s.sonHavaleBanka||"", kapali:new Set(), aile:new Set(), tarih:today(), musteri:"", tel:"", belge:"", personel:s.sonPersonel||"", gider:"", not:"", yeni:false };
   const kartOps = sec => `<option value="tek"${sec==="tek"?" selected":""}>Kart tek çekim (%${tlKisa(s.kom.kart)})</option>` + bankaOps(sec);
   const ciz = () => {
     sepetTemizle(); const kal = sepet(), us = kal.map(x=>db.units.find(u=>u.id===x.id)), fiyat = Object.fromEntries(kal.map(x=>[x.id, x.fiyat]));
-    if (!us.length && !st.yeni) { sheetKapat(); render(); return toast("Sepet boş"); }
+    if (!us.length && !st.yeni) return sepetBos();
     const oneri = sepetKampanyalari(us), payi = {}, kmpAd = {};
     oneri.forEach(o=>{ if (st.kapali.has(o.k.id+"|"+o.us.map(u=>u.id).join(","))) return; o.us.forEach(u=>{ payi[u.id] = r2(o.k.prim/o.us.length); kmpAd[u.id] = o.k; }); });
     const toplam = r2(us.reduce((a,u)=>a+num(fiyat[u.id]),0));
@@ -1422,7 +1428,7 @@ function sepetAc(){
       return [u, satisHesap(u, { tutar:fiyat[u.id], komOran:efOran, gider: toplam ? r2(gider*num(fiyat[u.id])/toplam) : 0, kampPrim:payi[u.id]||0, fark: u.alis && f && f.icinde ? f.tutar : 0, aile: st.aile.has(u.id) ? aileFark(P(u.pid).model) : 0 })]; });
     const bilinen = H.filter(([u])=>u.alis), T = k => r2(H.reduce((a,[,h])=>a+h[k],0)), TK = k => r2(bilinen.reduce((a,[,h])=>a+h[k],0));
     const pers = PERSONEL();
-    sheet(`<div class="row sp"><h2 style="margin:0">🛒 Satış · ${us.length} ürün</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    main.innerHTML = (`<div class="row sp" style="margin:0 2px 2px"><b>${us.length} ürün</b><span class="muted">Fiyatları kontrol edip müşteri ve ödemeyi girin</span></div>
       ${H.map(([u,h])=>{ const p = P(u.pid), a = aileFark(p.model); return `<div class="satir">
         <div class="row sp"><div><b>${esc(pBas(p))}</b><div class="muted">${esc(pAlt(p))}</div></div><button class="mini" data-sc="${u.id}" style="flex:0 0 auto">Çıkar</button></div>
         <div class="muted">${u.alis?`Maliyet ${TL(maliyet(u))}`:`<span class="neg">Maliyet bilinmiyor${u.stoksuz?" (stoksuz)":""}</span>`}${u.seri?" · seri "+esc(u.seri):""}${kmpAd[u.id]?` · <span class="pos">${esc(kmpAd[u.id].ad)} +${TL(payi[u.id])}</span>`:""}${h.fark?` · <span class="pos">fiyat farkı +${TL(h.fark)}</span>`:""}</div>
@@ -1455,7 +1461,7 @@ function sepetAc(){
       <div class="row" style="margin-top:8px"><button class="b2" id="spTeklif">Teklif gönder</button><button class="b2 red" id="spBos">Sepeti boşalt</button></div>`);
     const oku = () => { st.tarih=$("#spTar").value||today(); st.musteri=$("#spMus").value; st.tel=$("#spTel").value; st.belge=$("#spBelge").value; st.gider=$("#spGider").value; st.not=$("#spNot").value; st.havaleBanka=$("#spHavB").value; };
     const yeniden = () => { oku(); ciz(); };
-    $("#kapat").onclick=()=>{ oku(); sheetKapat(); render(); };
+    ["#spMus","#spTel","#spBelge","#spNot","#spHavB"].forEach(i=>$(i).oninput=oku); // sekme değişince yazılanlar kaybolmasın
     document.querySelectorAll("[data-sf]").forEach(i=>i.onchange=()=>{ const x = sepet().find(y=>y.id===i.dataset.sf); x.fiyat = r2(num(i.value)); if (st.kart!==null && num(st.kart)>=toplam) st.kart = null; save(); yeniden(); });
     document.querySelectorAll("[data-sc]").forEach(b=>b.onclick=()=>{ db.sepet = sepet().filter(x=>x.id!==b.dataset.sc); save(); yeniden(); });
     document.querySelectorAll("[data-kp]").forEach(c=>c.onchange=()=>{ c.checked ? st.kapali.delete(c.dataset.kp) : st.kapali.add(c.dataset.kp); yeniden(); });
@@ -1471,7 +1477,7 @@ function sepetAc(){
     if ($("#spN")) $("#spN").onchange=e=>{ st.n=e.target.value; yeniden(); };
     $("#spHav").onchange=e=>{ st.havale=e.target.value; if (st.kart===null && num(e.target.value)) st.kart = r2(Math.max(0, toplam-num(e.target.value))); yeniden(); };
     ["#spTar","#spGider"].forEach(i=>$(i).onchange=yeniden);
-    $("#spBos").onclick=()=>{ if (!confirm("Sepet boşaltılsın mı? (Stoktaki ürünler stokta kalır)")) return; db.sepet=[]; sepetTemizle(); save(); sheetKapat(); render(); };
+    $("#spBos").onclick=()=>{ if (!confirm("Sepet boşaltılsın mı? (Stoktaki ürünler stokta kalır)")) return; db.sepet=[]; durum.sepetSt=null; sepetTemizle(); save(); render(); };
     $("#spTeklif").onclick=async()=>{ oku();
       const BB = B || bankaBul(varsayilanBanka().id), satir = H.map(([u])=>{ const p=P(u.pid); return `• ${pBas(p)}: ${TL(fiyat[u.id])}`; });
       const tk = taksitSayilari(BB).filter(n=>!(BB.tur==="kart" && us.some(u=>P(u.pid).kategori==="Televizyon") && toplam>5000 && n>4));
@@ -1482,12 +1488,12 @@ function sepetAc(){
     $("#spKay").onclick=()=>{ oku();
       if (H.some(([u])=>!num(fiyat[u.id]) && !(kmpAd[u.id] && kmpAd[u.id].gruplar.some(g=>/hediye/i.test(g.ad) && grupUyar(g,u))))) return alert("Her ürünün satış fiyatını yazın (kampanyadaki hediye ürün 0 olabilir).");
       if (pers.length && !st.personel && !confirm("Satışı yapan seçilmedi. Yine de kaydedilsin mi?")) return;
-      const sid = uid(), anaOdeme = kart>0 ? (B && +st.n>1 ? "taksit" : "kart") : havale>0 ? "havale" : "nakit";
+      const sid = uid(), fisNo = yeniFisNo(), saat = new Date().toTimeString().slice(0,5), anaOdeme = kart>0 ? (B && +st.n>1 ? "taksit" : "kart") : havale>0 ? "havale" : "nakit";
       const islem = { toplam, kart, kartBanka: B ? B.ad : "Tek çekim", n: B ? +st.n : 1, havale, havaleBanka: havale ? st.havaleBanka.trim() : "", nakit };
-      H.forEach(([u,h])=>{ u.satis = { tarih:st.tarih, tutar:h.tutar, odeme:anaOdeme, komOran:r2(efOran*10000)/10000, kom:h.kom, gider:h.gider, musteri:st.musteri.trim(), tel:st.tel.trim(), belge:st.belge.trim(), personel:st.personel,
+      H.forEach(([u,h])=>{ u.satis = { fisNo, saat, tarih:st.tarih, tutar:h.tutar, odeme:anaOdeme, komOran:r2(efOran*10000)/10000, kom:h.kom, gider:h.gider, musteri:st.musteri.trim(), tel:st.tel.trim(), belge:st.belge.trim(), personel:st.personel,
         not:st.not.trim(), sepet:sid, islem, fark:h.fark, aile:h.aile, ...(kmpAd[u.id]?{ kampanya:{ id:kmpAd[u.id].id, ad:kmpAd[u.id].ad, prim:payi[u.id] } }:{}), ...(B?{ taksit:{ banka:B.ad, n:+st.n } }:{}) }; });
       s.sonKart = st.bid; s.sonPersonel = st.personel; s.sonHavaleBanka = st.havaleBanka;
-      db.sepet = []; durum.pid = null; save(); sheetKapat(); toast(`${us.length} ürün satıldı${bilinen.length?` · kâr ${TL(TK("kar"))}`:""}`); render(); };
+      db.sepet = []; durum.pid = null; durum.sepetSt = null; durum.fis = sid; durum.fisYeni = true; save(); toast(`${us.length} ürün satıldı · fiş ${fisNo}`); render(); window.scrollTo(0,0); };
   };
   ciz();
 }
@@ -1683,6 +1689,60 @@ function satisDefteriIndir(){
   });
   const out = XLSX.write(wb,{ bookType:"xlsx", type:"array" });
   indir(new Blob([out],{ type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `satis-defteri-${today()}.xlsx`);
+}
+
+/* ---------- Sepet sekmesi ve satış fişi ---------- */
+function vSepet(){ if (durum.fis) return fisGoster(durum.fis); sepetAc(); }
+function yeniFisNo(){ const s = db.settings; s.fisSayac = (s.fisSayac||0) + 1; return "S-" + String(s.fisSayac).padStart(4,"0"); }
+const islemKey = u => u.satis.sepet || ("tek|"+u.id);
+function islemOdeme(s0, toplam){
+  if (s0.islem) return s0.islem; const t = s0.odeme;
+  return { toplam, kart: t==="kart"||t==="taksit" ? toplam : 0, kartBanka: s0.taksit?.banka || "Kart", n: s0.taksit?.n || 1, havale: t==="havale" ? toplam : 0, havaleBanka:"", nakit: t==="nakit" ? toplam : 0 };
+}
+function fisVeri(key){
+  const us = db.units.filter(u=>u.satis && islemKey(u)===key); if (!us.length) return null;
+  const s0 = us[0].satis, toplam = r2(us.reduce((a,u)=>a+u.satis.tutar,0));
+  return { us, s0, toplam, o:islemOdeme(s0, toplam) };
+}
+const fisSatir = (sol, sag, kalin) => `<div class="row sp" style="padding:2px 0"><span${kalin?' style="font-weight:700"':""}>${sol}</span><b${kalin?' style="font-size:18px"':""}>${sag}</b></div>`;
+function fisGoster(key){
+  const v = fisVeri(key); if (!v) { durum.fis = null; return sepetAc(); }
+  const { us, s0, toplam, o } = v, s = db.settings, kmp = [...new Set(us.map(u=>u.satis.kampanya?.ad).filter(Boolean))];
+  main.innerHTML = `${durum.fisYeni?`<div class="res" style="margin:0 0 12px"><b>✓ Satış tamamlandı</b><div class="muted">Faturayı Diva’dan kesmeyi unutmayın.</div></div>`:""}
+    <div class="card fis" id="fis">
+      <div style="text-align:center;margin-bottom:8px"><div style="font-size:19px;font-weight:750;letter-spacing:-.01em">${esc(s.firma||"Bayi Defteri")}</div><div class="muted" style="letter-spacing:.12em;font-weight:700">SATIŞ FİŞİ</div></div>
+      ${fisSatir("Fiş no", esc(s0.fisNo||"—"))}${fisSatir("Tarih", trDate(s0.tarih)+(s0.saat?" "+s0.saat:""))}
+      ${s0.musteri?fisSatir("Müşteri", esc(s0.musteri)):""}${s0.tel?fisSatir("Telefon", esc(s0.tel)):""}${s0.belge?fisSatir("Fatura no", esc(s0.belge)):""}${s0.personel?fisSatir("Satış temsilcisi", esc(s0.personel)):""}
+      <hr>
+      ${us.map(u=>{ const p = P(u.pid); return `<div class="row sp" style="padding:4px 0;align-items:flex-start"><div><b style="font-weight:650">${esc(pBas(p))}</b><div class="muted">${esc([p.ad && p.ad.length<60 ? p.ad : "", u.seri?"Seri: "+u.seri:""].filter(Boolean).join(" · "))}</div></div><b>${TL(u.satis.tutar)}</b></div>`; }).join("")}
+      ${kmp.length?`<div class="muted" style="margin-top:4px">Kampanya: ${esc(kmp.join(", "))}</div>`:""}
+      <hr>
+      ${fisSatir("Toplam", TL(toplam), true)}
+      ${o.kart?fisSatir(`Kredi kartı${o.kartBanka&&o.kartBanka!=="Kart"?" · "+esc(o.kartBanka.split(" · ")[0].replace(/\s*\(ertesi gün\)/,"")):""}${o.n>1?` · ${o.n} taksit`:""}`, TL(o.kart)):""}
+      ${o.havale?fisSatir(`Havale${o.havaleBanka?" · "+esc(o.havaleBanka):""}`, TL(o.havale)):""}
+      ${o.nakit?fisSatir("Nakit", TL(o.nakit)):""}
+      <div class="muted" style="text-align:center;margin-top:12px">Fiyatlara KDV dahildir. Bu belge fatura yerine geçmez; faturanız ayrıca düzenlenir.</div>
+    </div>
+    <div class="row"><button class="b" id="fisPaylas">Paylaş</button><button class="b" id="fisYazdir" style="background:var(--brand2);color:var(--brand)">Yazdır / PDF</button></div>
+    <button class="b2" id="fisYeni" style="width:100%;margin-top:10px">${durum.fisYeni?"Yeni satış":"← Sepete dön"}</button>`;
+  $("#fisYeni").onclick=()=>{ durum.fis=null; durum.fisYeni=false; render(); };
+  $("#fisYazdir").onclick=()=>window.print();
+  $("#fisPaylas").onclick=async()=>{
+    const metin = [ s.firma||"", "SATIŞ FİŞİ", `Fiş no: ${s0.fisNo||"—"} · ${trDate(s0.tarih)}${s0.saat?" "+s0.saat:""}`, s0.musteri?`Müşteri: ${s0.musteri}`:null, s0.belge?`Fatura no: ${s0.belge}`:null, "",
+      ...us.map(u=>`• ${pBas(P(u.pid))}${u.seri?" ("+u.seri+")":""}: ${TL(u.satis.tutar)}`), kmp.length?`Kampanya: ${kmp.join(", ")}`:null, "", `TOPLAM: ${TL(toplam)}`,
+      o.kart?`Kredi kartı${o.n>1?` (${o.n} taksit)`:""}: ${TL(o.kart)}`:null, o.havale?`Havale: ${TL(o.havale)}`:null, o.nakit?`Nakit: ${TL(o.nakit)}`:null, "", "Fiyatlara KDV dahildir. Bu belge fatura yerine geçmez." ].filter(x=>x!==null).join("\n");
+    try { if (navigator.share) await navigator.share({ text:metin }); else { await navigator.clipboard.writeText(metin); toast("Fiş metni kopyalandı"); } }
+    catch(e){ if (e && e.name!=="AbortError") { try { await navigator.clipboard.writeText(metin); toast("Fiş metni kopyalandı"); } catch(_) { alert(metin); } } }
+  };
+}
+/* Sepet boşken: son satışlar (dokununca fişi açılır) */
+function sepetBos(){
+  const g = {}; db.units.filter(u=>u.satis).forEach(u=>{ const k = islemKey(u); (g[k] ||= []).push(u); });
+  const l = Object.entries(g).map(([k,us])=>({ k, s0:us[0].satis, n:us.length, t:r2(us.reduce((a,u)=>a+u.satis.tutar,0)), ad:us.map(u=>P(u.pid)?.model).join(", ") }))
+    .sort((a,b)=>(b.s0.tarih+(b.s0.saat||"")).localeCompare(a.s0.tarih+(a.s0.saat||""))).slice(0,20);
+  main.innerHTML = `<div class="empty" style="padding:28px 12px 18px"><div style="font-size:40px">🛒</div><b style="color:var(--ink)">Sepet boş</b><br>Fiyat Ver’de üründe “Sepete ekle” ya da “Sat” deyin.</div>
+    ${l.length?`<h2>Son satışlar</h2><div class="card list">${l.map(x=>`<div class="it tap" data-fis="${esc(x.k)}"><div class="row sp"><div><b>${esc(x.s0.musteri||"Müşteri yazılmamış")}</b><div class="muted">${esc(x.s0.fisNo || (x.s0.kaynak?"Diva":"fişsiz"))} · ${trDate(x.s0.tarih)} · ${x.n} ürün · ${esc(x.ad.slice(0,40))}</div></div><div class="sag"><b>${TL(x.t)}</b></div></div></div>`).join("")}</div>`:""}`;
+  main.querySelectorAll("[data-fis]").forEach(d=>d.onclick=()=>{ durum.fis = d.dataset.fis; durum.fisYeni = false; render(); window.scrollTo(0,0); });
 }
 
 /* Alt pencere */
