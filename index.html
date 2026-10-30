@@ -108,7 +108,7 @@ body.sepetli main{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:0, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
+const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
   try { db = JSON.parse(localStorage.getItem(KEY)) || BOS(); } catch(e){ db = BOS(); }
@@ -117,6 +117,7 @@ function load(){
 function normalize(){
   const d = BOS(); db.settings = Object.assign(d.settings, db.settings||{}); db.settings.kom = Object.assign(d.settings.kom, db.settings.kom||{}); db.settings.taksit = Object.assign(d.settings.taksit, db.settings.taksit||{});
   db.products ||= []; db.units ||= []; db.listeler ||= []; db.katalog ||= {}; db.kampanyalar ||= []; db.sepet ||= [];
+  if (!db.settings.prim6) { if (!num(db.settings.prim)) db.settings.prim = 6; db.settings.prim6 = true; } // 30.10: Profilo yıl sonu primi %6
   db.kampanyalar.forEach(k=>{ if (k.haricSon===undefined && k.gruplar.length===1 && k.gruplar[0].kat.includes("Buzdolabı")) k.haricSon = ["76","86"]; });
   /* 30.10: stok dökümünden "Küçük ev aleti" diye girilmiş buzdolabı vb. kategorileri düzelt */
   db.products.forEach(p=>{ if (p.kategori==="Küçük ev aleti") { const k = db.katalog[normModel(p.model)]?.kategori || listeKategori(p.ad||""); if (k && k!=="Küçük ev aleti") p.kategori = k; } });
@@ -152,7 +153,10 @@ function num(v){
 }
 /* Maliyet ve prim */
 const maliyet = u => r2(u.alis + (u.ekMaliyet||0));
-const primOran = u => { const p = P(u.pid); return p && p.prim != null && p.prim !== "" ? num(p.prim) : num(db.settings.prim); };
+/* Yıl sonu primi: Profilo'da sabit %6 (MEY 30.10); toptan listedeki "Solo PH" ve "Ankastre PH" sayfalarındaki ürünlerde yok */
+const phMi = model => { const k = db.katalog[normModel(model)]; return !!k && (k.ph ?? /\bPH\b/i.test(k.sayfa||"")); };
+const primOranUrun = p => !p ? 0 : p.prim != null && p.prim !== "" ? num(p.prim) : trk(p.marka||"Profilo")!=="profilo" || phMi(p.model) ? 0 : num(db.settings.prim);
+const primOran = u => primOranUrun(P(u.pid));
 const primTutar = u => r2(u.alis * primOran(u)/100);
 const primliMaliyet = u => r2(maliyet(u) - primTutar(u));
 const maliyetKutu = u => `<div class="kdv iki"><div><span>Maliyet (prim düşmeden)</span><b>${TL(maliyet(u))}</b></div><div class="prim"><span>Prim düştükten sonra · %${primOran(u)}</span><b>${TL(primliMaliyet(u))}</b></div></div>`;
@@ -320,7 +324,7 @@ const eksikler = () => { const s = new Set(db.units.filter(u=>!u.satis && !u.ali
 function urunDetay(pid){
   const p = P(pid), us = db.units.filter(u=>u.pid===pid).sort((a,b)=>(!!a.satis-!!b.satis)||a.gTarih.localeCompare(b.gTarih));
   sheet(`<div class="row sp"><h2 style="margin:0">${esc(pAd(p))}</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
-    <div class="muted">${esc([p.kategori, p.barkod&&"barkod "+p.barkod, p.liste&&"liste "+TL(p.liste), "prim %"+(p.prim!=null&&p.prim!==""?p.prim:db.settings.prim+" (genel)")].filter(Boolean).join(" · "))}</div>
+    <div class="muted">${esc([p.kategori, p.barkod&&"barkod "+p.barkod, p.liste&&"liste "+TL(p.liste), "yıl sonu primi %"+primOranUrun(p)+(p.prim!=null&&p.prim!==""?" (ürüne özel)":trk(p.marka||"Profilo")!=="profilo"?" (Profilo dışı)":phMi(p.model)?" (PH ürünü, prim yok)":" (genel)")].filter(Boolean).join(" · "))}</div>
     ${listeKutu(p.model)}
     <div class="row" style="margin-top:10px"><button class="b2" id="duz">Ürünü düzenle</button><button class="b2" id="ekle">Bu üründen giriş</button></div>
     ${stoktaki(pid).length?`<button class="b2" id="topFiyat" style="width:100%;margin-top:8px">Stoğun alış fiyatını değiştir (${stoktaki(pid).length} cihaz)</button>`:""}
@@ -575,6 +579,7 @@ function vDiger(){
       <label>Yedekten geri yükle</label><input type="file" id="yYukle" accept=".json,application/json"></div>
     <div class="card"><h3>Profilo fiyat listesi (aylık)</h3>
       ${guncelListe()?`<div class="row sp"><span>Güncel: <b>${esc(guncelListe().ad)}</b></span><span class="muted">${Object.keys(guncelListe().k).length} ürün</span></div>`:`<div class="muted">Henüz liste yüklenmedi.</div>`}
+      ${guncelListe() && Object.values(db.katalog).some(k=>k.ph===undefined) ? `<div class="res" style="background:var(--warnbg)">Yıl sonu primi için PH ürünlerinin tam ayrımı: güncel listeyi bir kez yeniden yükleyin.</div>` : ""}
       <div class="muted">Her ay gelen “Toptan Fiyat Listesi” Excel’ini seçin. Yüklenince her üründe “şu an alsa” fiyatı ve geçen aya göre değişim görünür.</div>
       <input type="file" id="fListe" accept=".xlsx,.xls">
       ${db.listeler.length>1?`<div class="muted" style="margin-top:8px">Önceki listeler: ${db.listeler.slice(1).map(l=>esc(l.ad)).join(", ")}</div>`:""}
@@ -598,7 +603,7 @@ function vDiger(){
     <div class="card"><h3>Listeden yükle</h3><div class="muted">Mevcut stok listesi: Excel (.xlsx) ya da CSV. Sütunları siz eşleştirirsiniz.</div>
       <input type="file" id="liste" accept=".xlsx,.xls,.csv,text/csv"></div>
     <div class="card"><h3>Ayarlar</h3>
-      <div class="row"><div><label>Hedef kâr %</label><input id="aMarj" inputmode="decimal" value="${s.marj}"></div><div><label>Yıl sonu primi % (genel)</label><input id="aPrim" inputmode="decimal" value="${virgul(s.prim)}"></div></div>
+      <div class="row"><div><label>Hedef kâr %</label><input id="aMarj" inputmode="decimal" value="${s.marj}"></div><div><label>Yıl sonu primi % (genel; PH ürünleri hariç)</label><input id="aPrim" inputmode="decimal" value="${virgul(s.prim)}"></div></div>
       <div class="muted">Ürüne özel prim oranı ürün düzenleme ekranından girilir.</div>
       <label>Komisyon oranları %</label>
       <div class="row">${Object.entries(ODEME).map(([k,v])=>`<div><div class="muted">${v}</div><input data-kom="${k}" inputmode="decimal" value="${virgul(s.kom[k])}"></div>`).join("")}</div>
@@ -658,9 +663,10 @@ function profiloListesiCoz(wb){
       const nak = r[pc[0]];
       if (typeof nak === "number" && nak > 0 && !/valör|valor|fiyat listesi/i.test(b)) {
         const key = normModel(b); n++;
-        if (k[key]) { cift++; if (!kat[key].ad && c) Object.assign(kat[key], { ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori:listeKategori(ana+" "+alt+" "+b) }); return; }
+        const ph = /\bPH\b/i.test(ad);
+        if (k[key]) { cift++; if (ph) kat[key].ph = true; if (!kat[key].ad && c) Object.assign(kat[key], { ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori:listeKategori(ana+" "+alt+" "+b) }); return; }
         k[key] = { n:r2(nak), v: typeof r[pc[1]]==="number" ? r2(r[pc[1]]) : null };
-        kat[key] = { model:b, ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori: /klima/i.test(ad) ? "Klima" : listeKategori(ana+" "+alt+" "+b), sayfa:ad, grup:(ana+" "+alt).trim() };
+        kat[key] = { model:b, ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori: /klima/i.test(ad) ? "Klima" : listeKategori(ana+" "+alt+" "+b), sayfa:ad, grup:(ana+" "+alt).trim(), ph };
       } else if (/GENEL ÜRÜN AÇIKLAMASI/i.test(c) && b !== b.toLocaleUpperCase("tr")) alt = b;
       else if (b === b.toLocaleUpperCase("tr") && !/\d/.test(b) && !/FİYAT|VALÖR|ÜRÜN/.test(b)) { ana = b; alt = ""; }
     });
