@@ -232,15 +232,16 @@ function vFiyat(){
     if (durum.pid && P(durum.pid)) return detay(P(durum.pid));
     const l = ara(durum.q, true).filter(p=>(!durum.kat || p.kategori===durum.kat) && (!durum.marka || (p.marka||"Markasız")===durum.marka));
     if (!db.products.length) { el.innerHTML = `<div class="empty">Henüz ürün yok.<br>“Giriş”ten faturayı okutun ya da Diğer → Listeden yükle.</div>`; return; }
-    el.innerHTML = l.length ? `<div class="card list">${l.slice(0,60).map(p=>{
-      const st = stoktaki(p.id), ms = st.map(maliyet), mn = Math.min(...ms), mx = Math.max(...ms);
-      return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}</div></div><div class="sag"><span class="pill">${st.length} adet</span>${degisimRozet(p.model)}<div class="muted">maliyet ${TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
-    }).join("")}</div>` : `<div class="empty">Stokta eşleşen ürün yok${durum.kat?` (${esc([durum.kat, durum.marka].filter(Boolean).join(" · "))})`:""}.</div>`;
+    el.innerHTML = (!durum.q && !durum.kat ? bitenUyari() : "") + (l.length ? `<div class="card list">${l.slice(0,60).map(p=>{
+      const st = stoktaki(p.id), ms = st.map(netMaliyet), mn = Math.min(...ms), mx = Math.max(...ms), netMi = st.some(u=>farkTutar(u));
+      return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}</div></div><div class="sag"><span class="pill">${st.length} adet</span>${degisimRozet(p.model)}<div class="muted">${netMi?"net maliyet":"maliyet"} ${TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
+    }).join("")}</div>` : "") + (l.length ? "" : `<div class="empty">Stokta eşleşen ürün yok${durum.kat?` (${esc([durum.kat, durum.marka].filter(Boolean).join(" · "))})`:""}.</div>`);
     const q = (durum.q||"").toLocaleLowerCase("tr").trim(), gor = new Set(l.map(p=>normModel(p.model)));
     const kat = q.length>=2 && guncelListe() ? Object.entries(guncelListe().k).filter(([m])=>!gor.has(m) && (!durum.kat || db.katalog[m]?.kategori===durum.kat) && (!durum.marka || trk(durum.marka)==="profilo") && (m.toLocaleLowerCase("tr").includes(q.replace(/\s+/g,"")) || (db.katalog[m]?.ad||"").toLocaleLowerCase("tr").includes(q))).slice(0,20) : [];
     if (kat.length) el.innerHTML += `<h2>Profilo fiyat listesinde</h2><div class="card list">${kat.map(([m,f])=>`<div class="it tap" data-m="${esc(m)}"><div class="row sp"><div><h3>${esc(db.katalog[m]?.model||m)}</h3><div class="muted">${esc((db.katalog[m]?.ad||"").slice(0,70))}</div></div><div class="sag"><b>${TL(f.n)}</b><div class="muted">nakit</div></div></div></div>`).join("")}</div>`;
     el.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>{ durum.pid=d.dataset.p; sonuc(); });
     el.querySelectorAll("[data-m]").forEach(d=>d.onclick=()=>katalogDetay(d.dataset.m));
+    if ($("#bitenAc")) $("#bitenAc").onclick=bitenListe;
   }
   function detay(p){
     const el = $("#sonuc"), st = stoktaki(p.id).sort((a,b)=>a.gTarih.localeCompare(b.gTarih));
@@ -257,15 +258,13 @@ function vFiyat(){
       ${st.length ? kampanyaKutu(st[0]) : ""}
       ${st.length ? `<div class="card"><h3>Taksit seçenekleri ve teklif</h3><div id="taksitAlan"></div></div>` : ""}
       ${st.length ? gruplar(st).map(g=>{ const u = g[0];
-        const o = fiyatIcin(maliyet(u), durum.marj, kom), z = fiyatIcin(maliyet(u), 0, kom), zp = fiyatIcin(primliMaliyet(u), 0, kom);
+        const nk = netKart(p, u, kom), o = nk.o;
         return `<div class="card">
           <div class="row sp"><div><b>${grupBaslik(g)}</b><div class="muted">Giriş ${trDate(u.gTarih)} · ${gun(u.gTarih)} gündür stokta</div></div>${gun(u.gTarih)>90?'<span class="pill warn" style="flex:0 0 auto">bekleyen</span>':""}</div>
-          ${maliyetKutu(u)}${maliyetYok(u)}
+          ${nk.ust}
           ${u.ekMaliyet?`<div class="muted">Alış ${TL(u.alis)} + ek maliyet ${TL(u.ekMaliyet)}</div>`:""}
           ${listeFiyat(p.model)&&u.alis?`<div class="muted">Şu an alsa nakit ${TL(listeFiyat(p.model).n)} · senin alışın ${TL(u.alis)} (${Math.abs(listeFiyat(p.model).n-u.alis)<1?"liste fiyatıyla aynı":(listeFiyat(p.model).n>u.alis?"ucuza almışsın ":"pahalıya almışsın ")+TL(Math.abs(listeFiyat(p.model).n-u.alis))})</div>`:""}
-          <div class="res"><div class="muted">Önerilen satış fiyatı (%${durum.marj} kâr, prim hariç)</div><div class="big">${TL(o)}</div></div>
-          ${farkKutu(p, u, kom)}
-          <div class="res neg"><div class="row sp"><span class="muted">Zarar sınırı · primsiz</span><b>${TL(z)}</b></div><div class="row sp"><span class="muted">Zarar sınırı · prim düşünce</span><b>${TL(zp)}</b></div></div>
+          ${nk.alt}
           <div class="row"><button class="b" data-sat="${u.id}" data-f="${o}">${g.length>1?"1 adet sat":"Sat"}</button><button class="b" style="background:var(--okbg);color:var(--ok)" data-sepet="${g.map(x=>x.id).join(",")}" data-f="${o}">Sepete ekle${(()=>{ const n = sepet().filter(x=>g.some(y=>y.id===x.id)).length; return n ? " ("+n+")" : ""; })()}</button></div>
         </div>`;}).join("") : `<div class="empty">Bu üründen stokta cihaz kalmamış.</div>`}`;
     $("#geri").onclick=()=>{ durum.pid=null; vFiyat(); };
@@ -274,7 +273,7 @@ function vFiyat(){
     el.querySelectorAll("[data-sat]").forEach(b=>b.onclick=()=>satisFormu(b.dataset.sat, +b.dataset.f));
     el.querySelectorAll("[data-kmp]").forEach(b=>b.onclick=()=>kampanyaSatis(b.dataset.kmp, b.dataset.u));
     el.querySelectorAll("[data-sepet]").forEach(b=>b.onclick=()=>sepeteEkle(b.dataset.sepet.split(","), +b.dataset.f));
-    if (st.length) taksitCiz($("#taksitAlan"), p, fiyatIcin(maliyet(st[0]), durum.marj, s.kom.nakit||0));
+    if (st.length) taksitCiz($("#taksitAlan"), p, fiyatIcin(netMaliyet(st[0]), durum.marj, s.kom.nakit||0));
   }
 }
 
@@ -291,9 +290,10 @@ function vStok(){
     const st = db.units.filter(u=>!u.satis), top = st.reduce((a,u)=>a+maliyet(u),0), topP = st.reduce((a,u)=>a+primliMaliyet(u),0);
     const lis = st.filter(u=>listeFiyat(P(u.pid)?.model)), lisT = lis.reduce((a,u)=>a+listeFiyat(P(u.pid).model).n,0), lisM = lis.reduce((a,u)=>a+u.alis,0);
     const ek = eksikler().length;
-    $("#ozetS").innerHTML = `${ek && durum.filt!=="eksik"?`<div class="card tap" id="ekUyari" style="background:var(--warnbg)"><b>${ek} üründe alış fiyatı eksik</b> <span class="muted">— göstermek için dokunun</span></div>`:""}<div class="card"><div class="muted">Stoktaki ${st.length} cihazın maliyeti</div><div class="kdv iki"><div><span>Prim düşmeden</span><b>${TL(top)}</b></div><div class="prim"><span>Prim düştükten sonra</span><b>${TL(topP)}</b></div></div>
+    $("#ozetS").innerHTML = bitenUyari() + `${ek && durum.filt!=="eksik"?`<div class="card tap" id="ekUyari" style="background:var(--warnbg)"><b>${ek} üründe alış fiyatı eksik</b> <span class="muted">— göstermek için dokunun</span></div>`:""}<div class="card"><div class="muted">Stoktaki ${st.length} cihazın maliyeti</div><div class="kdv iki"><div><span>Prim düşmeden</span><b>${TL(top)}</b></div><div class="prim"><span>Prim düştükten sonra</span><b>${TL(topP)}</b></div></div>
       ${lis.length?`<div class="row sp" style="margin-top:8px"><span class="muted">${lis.length} cihaz bugün alınsa (${esc(guncelListe().ad)}, nakit)</span><b>${TL(lisT)}</b></div><div class="row sp"><span class="muted">Senin alışına göre fark</span><b class="${lisT>=lisM?"pos":"neg"}">${lisT>=lisM?"+":""}${TL(lisT-lisM)}</b></div>`:""}</div>`;
     if ($("#ekUyari")) $("#ekUyari").onclick=()=>{ durum.filt="eksik"; vStok(); };
+    if ($("#bitenAc")) $("#bitenAc").onclick=bitenListe;
     if (durum.filt==="eksik") return eksikListe();
     const l = ara(durum.q, durum.filt==="stok");
     $("#liste").innerHTML = l.length ? `<div class="card list">${l.map(p=>{ const n=stoktaki(p.id).length, sat=db.units.filter(u=>u.pid===p.id&&u.satis).length;
@@ -337,7 +337,7 @@ function urunDetay(pid){
     const n = r2(num(v)); if (!n) return alert("Geçerli bir fiyat yazın."); stoktaki(pid).forEach(u=>u.alis=n); save(); urunDetay(pid); render(); };
   $("#ekle").onclick=()=>{ sheetKapat(); durum.girisPid=pid; go("giris"); };
   $("#usil").onclick=()=>{ if(!confirm("Ürün ve tüm cihaz kayıtları silinsin mi? (satış geçmişi dahil)")) return; db.units=db.units.filter(u=>u.pid!==pid); db.products=db.products.filter(x=>x.id!==pid); save(); sheetKapat(); render(); };
-  document.querySelectorAll("#sheet [data-sat]").forEach(b=>b.onclick=()=>{ const u=db.units.find(x=>x.id===b.dataset.sat); satisFormu(u.id, p.liste||fiyatIcin(maliyet(u),db.settings.marj,db.settings.kom[durum.odeme]||0)); });
+  document.querySelectorAll("#sheet [data-sat]").forEach(b=>b.onclick=()=>{ const u=db.units.find(x=>x.id===b.dataset.sat); satisFormu(u.id, p.liste||fiyatIcin(netMaliyet(u),db.settings.marj,db.settings.kom[durum.odeme]||0)); });
   document.querySelectorAll("#sheet [data-geri]").forEach(b=>b.onclick=()=>{ if(!confirm("Satış silinip cihaz stoğa geri alınsın mı?")) return; db.units.find(x=>x.id===b.dataset.geri).satis=null; save(); urunDetay(pid); render(); });
   document.querySelectorAll("#sheet [data-sil]").forEach(b=>b.onclick=()=>{ if(!confirm("Bu cihaz kaydı silinsin mi?")) return; db.units=db.units.filter(x=>x.id!==b.dataset.sil); save(); urunDetay(pid); render(); });
   document.querySelectorAll("#sheet [data-ud]").forEach(b=>b.onclick=()=>cihazFormu(db.units.find(x=>x.id===b.dataset.ud)));
@@ -552,12 +552,14 @@ function vKar(){
       <div class="card"><div class="muted">Komisyon + ek gider</div><b>${TL(T("kom")+T("gider"))}</b></div>
     </div>
     ${T("kampPrim")||T("fark")||T("aile")?`<div class="card" style="margin-top:10px"><div class="muted">Profilo’dan gelecek, kâra dahil</div>${T("kampPrim")?`<div class="row sp"><span>Kampanya (bundle) primleri</span><b class="pos">${TL(T("kampPrim"))}</b></div>`:""}${T("fark")?`<div class="row sp"><span>Fiyat farkları</span><b class="pos">${TL(T("fark"))}</b></div>`:""}${T("aile")?`<div class="row sp"><span>Aile Bakanlığı farkları</span><b class="pos">${TL(T("aile"))}</b></div>`:""}</div>`:""}
+    ${(()=>{ const a = alacaklar(), m = db.units.filter(u=>montajSartli(u) && !u.satis.montaj).length; return a.bekleyen || m ? `<div class="card tap" id="alacakAc" style="margin-top:10px;background:var(--okbg)"><div class="row sp"><b>Profilo alacakları</b><b class="pos">${TL(a.bekleyen)}</b></div><div class="muted">Tahsil edilmemiş bundle primi, fiyat farkı ve Aile Bakanlığı farkları${m?` · ${m} satışta montaj bekleniyor`:""}. Ayrıntı için dokunun.</div></div>` : ""; })()}
     <div class="card" style="margin-top:10px"><div class="muted">${yil} alımları ve beklenen yıl sonu primi</div><div class="row sp"><span>Alım tutarı (${alimYil.length} cihaz)</span><b>${TL(alimTop)}</b></div><div class="row sp"><span>Beklenen prim</span><b class="pos">${TL(primYil)}</b></div></div>
     ${Object.keys(kat).length?`<h2>Kategoriye göre</h2><div class="card"><table><tr><th>Kategori</th><th>Adet</th><th style="text-align:right">Kâr</th><th style="text-align:right">Primli</th></tr>${Object.entries(kat).sort((a,b)=>b[1].kar-a[1].kar).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.n}</td><td style="text-align:right" class="${v.kar<0?"neg":"pos"}">${TL(v.kar)}</td><td style="text-align:right">${TL(v.karP)}</td></tr>`).join("")}</table></div>`:""}
     <h2>Satışlar</h2>
     ${sat.length?`<div class="card list">${H.map(([u,h])=>`<div class="it tap" data-p="${u.pid}"><div class="row sp"><div><b>${esc(pAd(P(u.pid)))}</b><div class="muted">${trDate(u.satis.tarih)} · seri ${esc(u.seri||"—")} · ${ODEME[u.satis.odeme]||""}</div></div><div class="sag"><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b><div class="muted">${TL(u.satis.tutar)}</div></div></div></div>`).join("")}</div>`:`<div class="empty">Bu dönemde satış yok.</div>`}
     <div class="muted" style="margin-top:8px">Tüm tutarlar KDV dahil. Kâr = satış − maliyet − komisyon − ek gider + kampanya primi + fiyat farkı. Primli kâr, cihazın yıl sonu primini de ekler.</div>`;
   $("#ay").onchange=e=>{ durum.ay=e.target.value; vKar(); };
+  if ($("#alacakAc")) $("#alacakAc").onclick=alacakDefteri;
   main.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
 }
 
@@ -1076,7 +1078,7 @@ function kampanyaKutu(u){
 /* Uygulamada kampanyalı satış: birden çok cihaz birlikte satılır, bayi primi eşit bölünür */
 function kampanyaSatis(kid, ilkId){
   const k = db.kampanyalar.find(x=>x.id===kid), s = db.settings, sec = [db.units.find(x=>x.id===ilkId)], fiyat = {};
-  const oner = u => fiyatIcin(maliyet(u), s.marj, s.kom[durum.odeme]||0);
+  const oner = u => fiyatIcin(netMaliyet(u), s.marj, s.kom[durum.odeme]||0);
   fiyat[ilkId] = oner(sec[0]);
   let q = "";
   const ciz = () => {
@@ -1306,6 +1308,7 @@ function sepetAc(){
       ${oneri.length?`<div class="res" style="background:var(--okbg)"><b>Kampanyalar</b>${oneri.map(o=>{ const key = o.k.id+"|"+o.us.map(u=>u.id).join(","); return `<label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" data-kp="${esc(key)}" ${st.kapali.has(key)?"":"checked"} style="width:auto"> ${esc(o.k.ad)}: ${o.us.map(u=>esc(P(u.pid).model)).join(" + ")} · +${TL(o.k.prim)}</label>`; }).join("")}
         ${us.length>oneri.reduce((a,o)=>a+o.us.length,0)?`<div class="muted" style="margin-top:4px">Diğer ürünler kampanyasız satılır.</div>`:""}</div>`
         : aktifKampanyalar().length ? `<div class="muted" style="margin-top:8px">Sepetteki ürünler bir kampanya oluşturmuyor.</div>` : ""}
+      ${(()=>{ const kalan = us.filter(u=>!payi[u.id]), t = tamamlaOnerileri(kalan, us); return t.length ? `<div class="res" style="background:var(--warnbg)"><b>💡 Müşteriye önerin</b>${t.map(o=>`<div style="margin-top:6px">${esc(o.k.ad)}: ${esc(o.kat.join(" / "))} eklenirse <b class="pos">+${TL(o.k.prim)}</b> prim<div class="row" style="flex-wrap:wrap;gap:6px;margin-top:4px">${o.aday.map(c=>`<button class="mini" data-tm="${c.id}" style="flex:0 0 auto">＋ ${esc(P(c.pid).model)}</button>`).join("")}</div></div>`).join("")}</div>` : ""; })()}
       <div class="row"><div><label>Ödeme</label><select id="spOd">${odemeOps(st.odeme)}</select></div><div style="flex:0 0 100px"><label>Komisyon %</label><input id="spKom" inputmode="decimal" value="${virgul(st.kom)}"></div></div>
       ${st.odeme==="taksit"?`<div class="row"><div><label>Banka / kredi</label><select id="spBanka">${bankaOps(st.bid)}</select></div><div style="flex:0 0 110px"><label>Taksit</label><select id="spN">${ns.map(n=>`<option value="${n}"${String(n)===String(st.n)?" selected":""}>${n} ${B.tur==="kredi"?"ay":"taksit"}</option>`).join("")}</select></div></div>`:""}
       <div class="row"><div><label>Tarih</label><input id="spTar" type="date" value="${st.tarih}"></div><div><label>Müşteri</label><input id="spMus" value="${esc(st.musteri)}"></div></div>
@@ -1318,6 +1321,7 @@ function sepetAc(){
     const oku = () => { st.tarih=$("#spTar").value||today(); st.musteri=$("#spMus").value; st.gider=$("#spGider").value; st.not=$("#spNot").value; };
     $("#kapat").onclick=()=>{ oku(); sheetKapat(); render(); };
     document.querySelectorAll("[data-sf]").forEach(i=>i.onchange=()=>{ const x = sepet().find(y=>y.id===i.dataset.sf); x.fiyat = r2(num(i.value)); save(); oku(); ciz(); });
+    document.querySelectorAll("[data-tm]").forEach(b=>b.onclick=()=>{ const u = db.units.find(x=>x.id===b.dataset.tm); oku(); sepeteEkle([u.id], fiyatIcin(netMaliyet(u), s.marj, s.kom.nakit||0)); ciz(); });
     document.querySelectorAll("[data-sc]").forEach(b=>b.onclick=()=>{ db.sepet = sepet().filter(x=>x.id!==b.dataset.sc); save(); oku(); ciz(); });
     document.querySelectorAll("[data-kp]").forEach(c=>c.onchange=()=>{ c.checked ? st.kapali.delete(c.dataset.kp) : st.kapali.add(c.dataset.kp); oku(); ciz(); });
     document.querySelectorAll("[data-aile]").forEach(c=>c.onchange=()=>{ c.checked ? st.aile.add(c.dataset.aile) : st.aile.delete(c.dataset.aile); oku(); ciz(); });
@@ -1343,6 +1347,86 @@ function sepetAc(){
   };
   if (st.odeme==="taksit") { const n = taksitSayilari(bankaBul(st.bid))[0]; st.n = n||""; if (n) st.kom = bankaBul(st.bid).oran[n]; }
   ciz();
+}
+
+/* ---------- Net maliyet ve gerçek taban fiyat (fiyat farkı maliyetten düşülür) ---------- */
+const farkTutar = (u, tarih=today()) => { const f = farkBilgi(P(u.pid)?.model, tarih); return f && f.icinde ? f.tutar : 0; };
+const netMaliyet = u => r2(maliyet(u) - farkTutar(u));
+const kampanyaPayi = u => Math.max(0, ...urunKampanyalari(u).map(k=>r2(k.prim / k.gruplar.reduce((a,g)=>a+g.adet,0))));
+function netKart(p, u, kom){
+  const f = farkBilgi(p.model), fk = farkTutar(u), net = netMaliyet(u), prim = primTutar(u), kp = kampanyaPayi(u);
+  const o = fiyatIcin(net, durum.marj, kom), taban = fiyatIcin(net - prim, 0, kom), tabanK = kp ? fiyatIcin(net - prim - kp, 0, kom) : 0, sade = fiyatIcin(maliyet(u), 0, kom);
+  const ust = (fk ? `<div class="kdv"><div><span>Maliyet</span><b>${TL(maliyet(u))}</b></div><div class="prim"><span>Fiyat farkı</span><b>−${TL(fk)}</b></div><div style="background:var(--okbg)"><span>Net maliyet</span><b>${TL(net)}</b></div></div>
+      <div class="muted">Fiyat farkı ${trDate(f.bit)} tarihine kadar satışta Profilo’dan gelir.${f.ek?" "+esc(f.ek)+".":""}${prim?` Yıl sonu primi de düşünce ${TL(net-prim)} (%${primOran(u)}).`:""}</div>`
+    : `${maliyetKutu(u)}${f && !f.icinde ? `<div class="muted">Fiyat farkı dönemi dışında.</div>` : ""}`) + maliyetYok(u);
+  const alt = `<div class="res"><div class="muted">Önerilen satış fiyatı (%${durum.marj} kâr, ${fk?"net maliyet":"maliyet"} üstüne)</div><div class="big">${TL(o)}</div></div>
+    <div class="res neg"><div class="row sp"><span>Gerçek taban fiyat</span><b>${TL(taban)}</b></div>
+      <div class="muted">Bunun altı zarar: ${[fk&&"fiyat farkı", prim&&"yıl sonu primi"].filter(Boolean).join(" ve ") || "yalnız maliyet"}${fk||prim?" düşülmüş":""}, ${esc(ODEME[durum.odeme]||"")} komisyonu eklenmiş.</div>
+      ${tabanK?`<div class="row sp"><span>Kampanyalı satışta taban</span><b>${TL(tabanK)}</b></div>`:""}
+      ${fk||prim?`<div class="row sp"><span class="muted">Hiç destek gelmezse taban</span><b>${TL(sade)}</b></div>`:""}</div>
+    ${aileFark(p.model)?`<div class="muted">Aile Bakanlığı satışında ayrıca +${TL(aileFark(p.model))}</div>`:""}`;
+  return { o, ust, alt };
+}
+
+/* ---------- Biten destek uyarısı: fiyat farkı dönemi bitmeden satılması gereken stok ---------- */
+function bitenDestek(){
+  const f = db.fiyatFarki; if (!f || !f.bit || today() > f.bit) return null;
+  const kalan = Math.round((new Date(f.bit) - new Date(today())) / 864e5), satir = {};
+  db.units.forEach(u=>{ if (u.satis) return; const t = farkTutar(u); if (!t) return; const p = P(u.pid); (satir[p.id] ||= { p, n:0, t }).n++; });
+  const l = Object.values(satir).sort((a,b)=>b.n*b.t - a.n*a.t);
+  return { f, kalan, l, adet:l.reduce((a,x)=>a+x.n,0), tutar:r2(l.reduce((a,x)=>a+x.n*x.t,0)) };
+}
+const bitenUyari = () => { const b = bitenDestek(); if (!b || !b.adet || b.kalan>45) return "";
+  return `<div class="card tap" id="bitenAc" style="background:var(--warnbg)"><b>⏳ Fiyat farkı ${trDate(b.f.bit)}’de bitiyor (${b.kalan} gün)</b><div class="muted">Stokta ${b.adet} cihazda toplam ${TL(b.tutar)} destek var; önce bunları satın. Göstermek için dokunun.</div></div>`; };
+function bitenListe(){
+  const b = bitenDestek(); if (!b) return;
+  sheet(`<div class="row sp"><h2 style="margin:0">Fiyat farkı biten stok</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(b.f.ad)} · son satış ${trDate(b.f.bit)} (${b.kalan} gün) · ${b.adet} cihaz · ${TL(b.tutar)}</div>
+    <div class="card list" style="margin-top:10px">${b.l.map(x=>`<div class="it tap" data-ac="${x.p.id}"><div class="row sp"><div><b>${esc(pAd(x.p))}</b><div class="muted">${x.n} adet × ${TL(x.t)}${/montaj/i.test(farkBilgi(x.p.model)?.ek||"")?" · montaj şartlı":""}</div></div><div class="sag"><b class="pos">${TL(x.n*x.t)}</b></div></div></div>`).join("")}</div>`);
+  $("#kapat").onclick=sheetKapat;
+  document.querySelectorAll("#sheet [data-ac]").forEach(d=>d.onclick=()=>{ sheetKapat(); durum.q=""; durum.kat=""; durum.pid=d.dataset.ac; go("fiyat"); });
+}
+
+/* ---------- Profilo alacak defteri: satışlardan doğan destekler ay ay, tahsil işaretiyle ---------- */
+const ALACAK = { kampPrim:"Bundle (kampanya) primleri", fark:"Fiyat farkları", aile:"Aile Bakanlığı farkları" };
+const montajSartli = u => u.satis && u.satis.fark && /montaj/i.test(farkBilgi(P(u.pid)?.model, u.satis.tarih)?.ek || "");
+function alacaklar(){
+  const ay = {};
+  db.units.forEach(u=>{ if (!u.satis) return; const h = satisKar(u), a = u.satis.tarih.slice(0,7);
+    for (const k in ALACAK) if (h[k]) { const x = (ay[a] ||= {})[k] ||= { tutar:0, n:0 }; x.tutar = r2(x.tutar + h[k]); x.n++; } });
+  db.tahsil ||= {};
+  let bekleyen = 0; for (const a in ay) for (const k in ay[a]) if (!db.tahsil[a+"|"+k]) bekleyen += ay[a][k].tutar;
+  return { ay, bekleyen:r2(bekleyen) };
+}
+function alacakDefteri(){
+  const { ay } = alacaklar(), aylar = Object.keys(ay).sort().reverse(), yil = today().slice(0,4);
+  const yilPrim = r2(db.units.filter(u=>u.gTarih.startsWith(yil)).reduce((a,u)=>a+primTutar(u),0));
+  const montaj = db.units.filter(u=>montajSartli(u) && !u.satis.montaj);
+  const ayAd = a => new Date(a+"-01").toLocaleDateString("tr-TR",{month:"long",year:"numeric"});
+  sheet(`<div class="row sp"><h2 style="margin:0">Profilo alacakları</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">Satışlardan doğan, Profilo’nun ödeyeceği destekler. Tahsil edilince işaretleyin.</div>
+    ${montaj.length?`<div class="res neg"><b>${montaj.length} satışta montaj bekleniyor</b> — fiyat farkı için ${trDate(db.fiyatFarki?.bit)} tarihine kadar montaj şartı var.
+      ${montaj.map(u=>`<div class="row sp" style="margin-top:6px"><span>${esc(P(u.pid).model)} · ${trDate(u.satis.tarih)}${u.satis.musteri?" · "+esc(u.satis.musteri):""}</span><button class="mini" data-mt="${u.id}" style="flex:0 0 auto">Montaj yapıldı</button></div>`).join("")}</div>`:""}
+    ${aylar.length ? aylar.map(a=>`<h2>${ayAd(a)}</h2><div class="card">${Object.keys(ALACAK).filter(k=>ay[a][k]).map(k=>{ const t = db.tahsil[a+"|"+k];
+      return `<div class="row sp" style="margin:6px 0"><div><b>${ALACAK[k]}</b><div class="muted">${ay[a][k].n} satış${t?` · tahsil ${trDate(t)}`:""}</div></div><div class="sag"><b class="${t?"":"pos"}">${TL(ay[a][k].tutar)}</b><div><label style="display:inline-flex;gap:6px;align-items:center;margin:0"><input type="checkbox" data-th="${a}|${k}" ${t?"checked":""} style="width:auto"> tahsil</label></div></div></div>`; }).join("")}</div>`).join("")
+      : `<div class="empty">Henüz destekli satış yok.</div>`}
+    <h2>Yıl sonu primi</h2><div class="card"><div class="row sp"><span>${yil} alımlarından beklenen</span><b class="pos">${TL(yilPrim)}</b></div><div class="muted">Oran: genel %${db.settings.prim||0} ya da ürüne özel${db.settings.prim?"":" — Ayarlar’dan genel oranı girin"}. Kademeli prim girilirse güncellenir.</div></div>`);
+  $("#kapat").onclick=()=>{ sheetKapat(); render(); };
+  document.querySelectorAll("[data-th]").forEach(c=>c.onchange=()=>{ c.checked ? db.tahsil[c.dataset.th] = today() : delete db.tahsil[c.dataset.th]; save(); alacakDefteri(); });
+  document.querySelectorAll("[data-mt]").forEach(b=>b.onclick=()=>{ const u = db.units.find(x=>x.id===b.dataset.mt); u.satis.montaj = today(); save(); toast("Montaj işlendi"); alacakDefteri(); });
+}
+
+/* ---------- Sepette "kampanyayı tamamla": kampanyasız kalan ürüne ne eklenirse prim gelir ---------- */
+function tamamlaOnerileri(kalanlar, sepettekiler){
+  if (!kalanlar.length) return [];
+  const ici = new Set(sepettekiler.map(u=>u.id)), aday = db.products.map(p=>stoktaki(p.id).find(u=>!ici.has(u.id))).filter(Boolean), out = [];
+  for (const k of [...aktifKampanyalar()].sort((a,b)=>b.prim-a.prim)) {
+    const min = k.gruplar.reduce((a,g)=>a+g.adet,0), max = k.gruplar.reduce((a,g)=>a+(g.enFazla||g.adet),0), uyan = [];
+    for (const c of aday) if (altKume(kalanlar, Math.max(1,min-1), max-1, s=>kampanyaUyar(k,[...s,c]))) uyan.push(c);
+    if (uyan.length) { const kat = [...new Set(uyan.map(c=>P(c.pid).kategori))];
+      out.push({ k, kat, aday: uyan.sort((a,b)=>stoktaki(b.pid).length-stoktaki(a.pid).length).slice(0,3) }); }
+  }
+  return out;
 }
 
 /* Alt pencere */
