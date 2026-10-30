@@ -99,15 +99,17 @@ html,body{overflow-x:hidden}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:0, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, apiKey:"" } });
+const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:0, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
   try { db = JSON.parse(localStorage.getItem(KEY)) || BOS(); } catch(e){ db = BOS(); }
   normalize();
 }
 function normalize(){
-  const d = BOS(); db.settings = Object.assign(d.settings, db.settings||{}); db.settings.kom = Object.assign(d.settings.kom, db.settings.kom||{});
-  db.products ||= []; db.units ||= []; db.listeler ||= []; db.katalog ||= {};
+  const d = BOS(); db.settings = Object.assign(d.settings, db.settings||{}); db.settings.kom = Object.assign(d.settings.kom, db.settings.kom||{}); db.settings.taksit = Object.assign(d.settings.taksit, db.settings.taksit||{});
+  db.products ||= []; db.units ||= []; db.listeler ||= []; db.katalog ||= {}; db.kampanyalar ||= [];
+  /* 30.10: stok dökümünden "Küçük ev aleti" diye girilmiş buzdolabı vb. kategorileri düzelt */
+  db.products.forEach(p=>{ if (p.kategori==="Küçük ev aleti") { const k = db.katalog[normModel(p.model)]?.kategori || listeKategori(p.ad||""); if (k && k!=="Küçük ev aleti") p.kategori = k; } });
   if ((db.v||1) < 2) { // v1: KDV hariç tutuluyordu → KDV dahile çevir
     db.units.forEach(u=>{ const o=1+(u.kdv??20)/100;
       if (u.alisHaric!=null){ u.alis=r2(u.alisHaric*o); u.ekMaliyet=r2((u.ekMaliyet||0)*o); delete u.alisHaric; }
@@ -145,9 +147,9 @@ const primTutar = u => r2(u.alis * primOran(u)/100);
 const primliMaliyet = u => r2(maliyet(u) - primTutar(u));
 const maliyetKutu = u => `<div class="kdv iki"><div><span>Maliyet (prim düşmeden)</span><b>${TL(maliyet(u))}</b></div><div class="prim"><span>Prim düştükten sonra · %${primOran(u)}</span><b>${TL(primliMaliyet(u))}</b></div></div>`;
 function satisHesap(u, s){
-  const tutar = r2(num(s.tutar)), kom = r2(tutar * num(s.komOran)/100), gider = r2(num(s.gider));
-  const kar = r2(tutar - maliyet(u) - kom - gider), prim = primTutar(u);
-  return { tutar, kom, gider, maliyet:maliyet(u), kar, prim, karPrimli:r2(kar+prim), oran: maliyet(u) ? kar/maliyet(u)*100 : 0 };
+  const tutar = r2(num(s.tutar)), kom = r2(tutar * num(s.komOran)/100), gider = r2(num(s.gider)), kampPrim = r2(num(s.kampPrim)), fark = r2(num(s.fark)), aile = r2(num(s.aile));
+  const kar = r2(tutar - maliyet(u) - kom - gider + kampPrim + fark + aile), prim = primTutar(u);
+  return { tutar, kom, gider, kampPrim, fark, aile, maliyet:maliyet(u), kar, prim, karPrimli:r2(kar+prim), oran: maliyet(u) ? kar/maliyet(u)*100 : 0 };
 }
 /* Hedef kâr %'si (maliyet üstüne) için satış fiyatı; komisyon satış tutarından kesilir */
 const fiyatIcin = (c, marj, komOran) => r2(c*(1+num(marj)/100) / (1 - num(komOran)/100));
@@ -209,7 +211,7 @@ function vFiyat(){
     if (!db.products.length) { el.innerHTML = `<div class="empty">Henüz ürün yok.<br>“Giriş”ten faturayı okutun ya da Diğer → Listeden yükle.</div>`; return; }
     el.innerHTML = l.length ? `<div class="card list">${l.slice(0,60).map(p=>{
       const st = stoktaki(p.id), ms = st.map(maliyet), mn = Math.min(...ms), mx = Math.max(...ms);
-      return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}</div></div><div class="sag"><span class="pill">${st.length} adet</span><div class="muted">maliyet ${TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
+      return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}</div></div><div class="sag"><span class="pill">${st.length} adet</span>${degisimRozet(p.model)}<div class="muted">maliyet ${TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
     }).join("")}</div>` : `<div class="empty">Stokta eşleşen ürün yok.</div>`;
     const q = (durum.q||"").toLocaleLowerCase("tr").trim(), gor = new Set(l.map(p=>normModel(p.model)));
     const kat = q.length>=2 && guncelListe() ? Object.entries(guncelListe().k).filter(([m])=>!gor.has(m) && (m.toLocaleLowerCase("tr").includes(q.replace(/\s+/g,"")) || (db.katalog[m]?.ad||"").toLocaleLowerCase("tr").includes(q))).slice(0,20) : [];
@@ -229,6 +231,8 @@ function vFiyat(){
         ${listeKutu(p.model)}
         ${listeFiyat(p.model)?`<div class="muted" style="margin-top:6px">Güncel liste fiyatına göre önerilen satış: <b>${TL(fiyatIcin(listeFiyat(p.model).n, durum.marj, kom))}</b></div>`:""}
       </div>
+      ${st.length ? kampanyaKutu(st[0]) : ""}
+      ${st.length ? `<div class="card"><h3>Taksit seçenekleri ve teklif</h3><div id="taksitAlan"></div></div>` : ""}
       ${st.length ? gruplar(st).map(g=>{ const u = g[0];
         const o = fiyatIcin(maliyet(u), durum.marj, kom), z = fiyatIcin(maliyet(u), 0, kom), zp = fiyatIcin(primliMaliyet(u), 0, kom);
         return `<div class="card">
@@ -237,6 +241,7 @@ function vFiyat(){
           ${u.ekMaliyet?`<div class="muted">Alış ${TL(u.alis)} + ek maliyet ${TL(u.ekMaliyet)}</div>`:""}
           ${listeFiyat(p.model)&&u.alis?`<div class="muted">Şu an alsa nakit ${TL(listeFiyat(p.model).n)} · senin alışın ${TL(u.alis)} (${Math.abs(listeFiyat(p.model).n-u.alis)<1?"liste fiyatıyla aynı":(listeFiyat(p.model).n>u.alis?"ucuza almışsın ":"pahalıya almışsın ")+TL(Math.abs(listeFiyat(p.model).n-u.alis))})</div>`:""}
           <div class="res"><div class="muted">Önerilen satış fiyatı (%${durum.marj} kâr, prim hariç)</div><div class="big">${TL(o)}</div></div>
+          ${farkKutu(p, u, kom)}
           <div class="res neg"><div class="row sp"><span class="muted">Zarar sınırı · primsiz</span><b>${TL(z)}</b></div><div class="row sp"><span class="muted">Zarar sınırı · prim düşünce</span><b>${TL(zp)}</b></div></div>
           <button class="b" data-sat="${u.id}" data-f="${o}">${g.length>1?"Bunlardan 1 adet sat":"Bu cihazı sat"}</button>
         </div>`;}).join("") : `<div class="empty">Bu üründen stokta cihaz kalmamış.</div>`}`;
@@ -244,39 +249,13 @@ function vFiyat(){
     $("#marj").onchange=e=>{ durum.marj=num(e.target.value); detay(p); };
     $("#od").onchange=e=>{ durum.odeme=e.target.value; detay(p); };
     el.querySelectorAll("[data-sat]").forEach(b=>b.onclick=()=>satisFormu(b.dataset.sat, +b.dataset.f));
+    el.querySelectorAll("[data-kmp]").forEach(b=>b.onclick=()=>kampanyaSatis(b.dataset.kmp, b.dataset.u));
+    if (st.length) taksitCiz($("#taksitAlan"), p, fiyatIcin(maliyet(st[0]), durum.marj, s.kom.nakit||0));
   }
 }
 
-/* Satış formu */
-function satisFormu(uidSec, fiyat){
-  const u = db.units.find(x=>x.id===uidSec), p = P(u.pid), s = db.settings;
-  sheet(`<h2>Satış · ${esc(pAd(p))}</h2><div class="muted">Seri: ${esc(u.seri||"—")}</div>${maliyetKutu(u)}
-    <label>Satış fiyatı (KDV dahil)</label><input id="sTutar" inputmode="decimal" value="${virgul(fiyat)}">
-    <div class="row"><div><label>Ödeme</label><select id="sOd">${odemeOps(durum.odeme)}</select></div><div style="flex:0 0 100px"><label>Komisyon %</label><input id="sKom" inputmode="decimal" value="${s.kom[durum.odeme]||0}"></div></div>
-    <label>Ek gider (montaj, nakliye, takas indirimi) — ₺</label><input id="sGider" inputmode="decimal" placeholder="0">
-    <div class="row"><div><label>Tarih</label><input id="sTarih" type="date" value="${today()}"></div><div><label>Müşteri (isteğe bağlı)</label><input id="sMus"></div></div>
-    <label>Not</label><input id="sNot">
-    <div id="sOzet"></div>
-    <button class="b" id="sKaydet">Satışı kaydet</button><button class="b2" id="kapat" style="width:100%;margin-top:8px">Vazgeç</button>`);
-  const oku = () => ({ tutar:$("#sTutar").value, odeme:$("#sOd").value, komOran:num($("#sKom").value), gider:$("#sGider").value, tarih:$("#sTarih").value||today(), musteri:$("#sMus").value.trim(), not:$("#sNot").value.trim() });
-  const ozet = () => { const h = satisHesap(u, oku());
-    $("#sOzet").innerHTML = `<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Satış</span><b>${TL(h.tutar)}</b></div><div class="row sp"><span>Maliyet</span><b>−${TL(h.maliyet)}</b></div><div class="row sp"><span>Komisyon</span><b>−${TL(h.kom)}</b></div><div class="row sp"><span>Ek gider</span><b>−${TL(h.gider)}</b></div>
-      <div class="row sp" style="margin-top:4px"><span class="big">Kâr</span><span class="big ${h.kar<0?"neg":"pos"}">${TL(h.kar)}</span></div>
-      <div class="row sp"><span>Prim düşünce kâr</span><b class="${h.karPrimli<0?"neg":"pos"}">${TL(h.karPrimli)}</b></div>
-      <div class="muted">Maliyete göre %${h.oran.toFixed(1)} · yıl sonu primi ${TL(h.prim)}</div></div>`; };
-  $("#sOd").onchange=e=>{ $("#sKom").value = s.kom[e.target.value]||0; ozet(); };
-  ["#sTutar","#sKom","#sGider"].forEach(i=>$(i).oninput=ozet);
-  ozet();
-  $("#kapat").onclick=sheetKapat;
-  $("#sKaydet").onclick=()=>{
-    const o = oku(); if (!num(o.tutar)) return alert("Satış fiyatını yazın.");
-    const h = satisHesap(u,o);
-    u.satis = { tarih:o.tarih, tutar:h.tutar, odeme:o.odeme, komOran:o.komOran, kom:h.kom, gider:h.gider, musteri:o.musteri, not:o.not };
-    durum.odeme = o.odeme; save(); sheetKapat(); durum.pid = stoktaki(p.id).length ? p.id : null; toast("Satış kaydedildi · kâr "+TL(h.kar)); render();
-  };
-}
 /* Kayıtlı satışın rakamları (prim ayarı değişirse kâr da güncellenir) */
-const satisKar = u => satisHesap(u, { tutar:u.satis.tutar, komOran:u.satis.komOran, gider:u.satis.gider });
+const satisKar = u => satisHesap(u, { tutar:u.satis.tutar, komOran:u.satis.komOran, gider:u.satis.gider, kampPrim:u.satis.kampanya?.prim, fark:u.satis.fark, aile:u.satis.aile });
 
 /* Stok */
 function vStok(){
@@ -325,7 +304,7 @@ function urunDetay(pid){
     ${gruplar(us).map(g=>{ const u = g[0], h = u.satis && satisKar(u); return `<div class="card"><div class="row sp"><b>${u.satis?`Seri: ${esc(u.seri||"—")}`:grupBaslik(g)}</b>${u.satis?`<span class="pill ok" style="flex:0 0 auto">satıldı</span>`:`<span class="pill" style="flex:0 0 auto">stokta ${gun(u.gTarih)} gün</span>`}</div>
       <div class="muted">Giriş ${trDate(u.gTarih)}${u.tedarikci?" · "+esc(u.tedarikci):""}${u.fatura?" · fatura "+esc(u.fatura):""}</div>
       ${maliyetKutu(u)}${u.satis?"":maliyetYok(u)}
-      ${u.satis?`<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Satış ${trDate(u.satis.tarih)} · ${ODEME[u.satis.odeme]||""}</span><b>${TL(u.satis.tutar)}</b></div><div class="row sp"><span>Kâr</span><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b></div><div class="row sp"><span>Prim düşünce kâr</span><b>${TL(h.karPrimli)}</b></div>${u.satis.musteri?`<div class="muted">${esc(u.satis.musteri)}</div>`:""}</div>`:""}
+      ${u.satis?`<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Satış ${trDate(u.satis.tarih)} · ${ODEME[u.satis.odeme]||""}</span><b>${TL(u.satis.tutar)}</b></div><div class="row sp"><span>Kâr</span><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b></div><div class="row sp"><span>Prim düşünce kâr</span><b>${TL(h.karPrimli)}</b></div>${u.satis.kampanya?`<div class="muted">Kampanya: ${esc(u.satis.kampanya.ad)} · prim payı ${TL(u.satis.kampanya.prim)}</div>`:""}${u.satis.fark?`<div class="muted">Profilo fiyat farkı ${TL(u.satis.fark)}</div>`:""}${u.satis.aile?`<div class="muted">Aile Bakanlığı farkı ${TL(u.satis.aile)}</div>`:""}${u.satis.taksit?`<div class="muted">${esc(u.satis.taksit.banka)} · ${u.satis.taksit.n} taksit</div>`:""}${u.satis.musteri?`<div class="muted">${esc(u.satis.musteri)}</div>`:""}</div>`:""}
       <div class="row" style="margin-top:8px">${u.satis?`<button class="b2" data-geri="${u.id}">Satışı geri al</button>`:`<button class="b2" data-sat="${u.id}">Sat</button><button class="b2" data-ud="${u.id}">Düzenle</button>`}<button class="b2 red" data-sil="${u.id}">${g.length>1?"1 adet sil":"Sil"}</button></div></div>`; }).join("")}
     <button class="b2 red" id="usil" style="width:100%;margin-top:10px">Ürünü tamamen sil</button>`);
   $("#kapat").onclick=sheetKapat;
@@ -339,7 +318,7 @@ function urunDetay(pid){
   document.querySelectorAll("#sheet [data-sil]").forEach(b=>b.onclick=()=>{ if(!confirm("Bu cihaz kaydı silinsin mi?")) return; db.units=db.units.filter(x=>x.id!==b.dataset.sil); save(); urunDetay(pid); render(); });
   document.querySelectorAll("#sheet [data-ud]").forEach(b=>b.onclick=()=>cihazFormu(db.units.find(x=>x.id===b.dataset.ud)));
 }
-const KATEGORI = ["Buzdolabı","Çamaşır makinesi","Bulaşık makinesi","Kurutma makinesi","Fırın","Ocak","Davlumbaz","Derin dondurucu","Klima","Süpürge","Küçük ev aleti"];
+const KATEGORI = ["Buzdolabı","Çamaşır makinesi","Bulaşık makinesi","Kurutma makinesi","Derin dondurucu","Fırın","Ocak","Davlumbaz","Ankastre set","Mikrodalga fırın","Klima","Televizyon","Süpürge","Su sebili","Küçük ev aleti"];
 function urunAlanlari(p={}, on=""){
   return `<div class="row"><div><label>Marka</label><input id="${on}pMarka" value="${esc(p.marka||"Profilo")}" list="markalar"></div><div><label>Kategori</label><input id="${on}pKat" value="${esc(p.kategori||"")}" list="kategoriler" placeholder="Buzdolabı…"></div></div>
     <label>Model kodu *</label><input id="${on}pModel" value="${esc(p.model||"")}" autocapitalize="characters">
@@ -476,7 +455,11 @@ async function claudeFatura(v){
   return JSON.parse(t.text);
 }
 async function faturaOku(f){
-  if (!db.settings.apiKey) { alert("Fatura okuma için Diğer → Ayarlar’a Claude API anahtarını girin."); return go("diger"); }
+  if (f.type==="application/pdf" || /\.pdf$/i.test(f.name)) {
+    sheet(`<h2>Fatura okunuyor…</h2><div class="yuk"><span class="big">⏳</span><span>e-Fatura PDF’i okunuyor.</span></div>`);
+    try { const r = efaturaCoz(await pdfSatirlar(f)); if (r && r.kalemler.length) return faturaOnay(r); } catch(e){ console.warn("PDF okunamadı", e); }
+    if (!db.settings.apiKey) { sheet(`<h2>Fatura tanınmadı</h2><div class="res neg">Bu PDF’in düzeni tanınmadı (taranmış ya da farklı şablon olabilir).</div><div class="muted" style="margin-top:8px">Elle giriş yapın ya da Ayarlar’a Claude API anahtarı girin.</div><button class="b" id="kapat">Tamam</button>`); $("#kapat").onclick=sheetKapat; return; }
+  } else if (!db.settings.apiKey) { alert("Fotoğraftan okuma için Diğer → Ayarlar’a Claude API anahtarı girin. e-Fatura PDF’ini seçerseniz anahtar gerekmez."); return go("diger"); }
   sheet(`<h2>Fatura okunuyor…</h2><div class="yuk"><span class="big">⏳</span><span>Kalemler çıkarılıyor, 20–60 saniye sürebilir.</span></div>`);
   let r;
   try { r = await claudeFatura(await dosyaVeri(f)); }
@@ -491,18 +474,19 @@ function faturaOnay(r){
       <div class="row"><div><label>Fatura no</label><input id="ftNo" value="${esc(r.fatura_no)}"></div><div><label>Tarih</label><input id="ftTar" type="date" value="${/^\d{4}-\d{2}-\d{2}$/.test(r.tarih)?r.tarih:today()}"></div></div>
       <label>Tedarikçi</label><input id="ftTed" value="${esc(r.tedarikci)}">
       ${r.not?`<div class="res" style="background:var(--warnbg)"><b>Not:</b> ${esc(r.not)}</div>`:""}
+      ${r.yerel?`<div class="muted">e-Fatura PDF’inden okundu. Model kodlarını kontrol edin; Diva’da ve stokta aynı yazılmalı.</div>`:""}
       ${k.map((x,i)=>{ const var_ = db.products.find(p=>normModel(p.model)===normModel(x.model));
         return `<div class="satir ${x.al?"":"kapali"}" data-i="${i}">
         <div class="row sp"><b>${i+1}. ${var_?'<span class="pill ok">kayıtlı ürün</span>':'<span class="pill warn">yeni ürün</span>'}</b><label style="flex:0 0 auto;margin:0"><input type="checkbox" data-k="al" ${x.al?"checked":""} style="width:auto"> stoğa al</label></div>
         <div class="row"><div><label>Model</label><input data-k="model" value="${esc(x.model)}"></div><div style="flex:0 0 70px"><label>Adet</label><input data-k="adet" inputmode="numeric" value="${x.adet}"></div></div>
-        <label>Açıklama</label><input data-k="aciklama" value="${esc(x.aciklama)}">
+        <div class="row"><div style="flex:0 0 110px"><label>Marka</label><input data-k="marka" value="${esc(x.marka||"")}"></div><div><label>Açıklama</label><input data-k="aciklama" value="${esc(x.aciklama)}"></div></div>
         <div class="row"><div><label>Birim fiyat (KDV dahil)</label><input data-k="birim_fiyat_kdv_dahil" inputmode="decimal" value="${virgul(x.birim_fiyat_kdv_dahil)}"></div><div><label>Kategori</label><input data-k="kategori" list="kategoriler" value="${esc(x.kategori)}"></div></div>
         <label>Seri numaraları (her satıra bir)</label><textarea data-k="seri" style="min-height:44px">${esc((x.seri_nolar||[]).join("\n"))}</textarea>
       </div>`; }).join("")}
       <datalist id="kategoriler">${KATEGORI.map(m=>`<option value="${esc(m)}">`).join("")}</datalist>
       <div id="ftTop"></div>
       <button class="b" id="ftKay">Stoğa al</button>`);
-    const topla = () => { const s = k.filter(x=>x.al); $("#ftTop").innerHTML = `<div class="res"><div class="row sp"><span>${s.reduce((a,x)=>a+(+x.adet||0),0)} cihaz</span><b>${TL(s.reduce((a,x)=>a+(+x.adet||0)*num(x.birim_fiyat_kdv_dahil),0))}</b></div><div class="muted">Faturanın genel toplamıyla karşılaştırın.</div></div>`; };
+    const topla = () => { const s = k.filter(x=>x.al); $("#ftTop").innerHTML = `<div class="res"><div class="row sp"><span>${s.reduce((a,x)=>a+(+x.adet||0),0)} cihaz</span><b>${TL(s.reduce((a,x)=>a+(+x.adet||0)*num(x.birim_fiyat_kdv_dahil),0))}</b></div>${r.toplam?(()=>{ const t=r2(s.reduce((a,x)=>a+(+x.adet||0)*num(x.birim_fiyat_kdv_dahil),0)), ok=Math.abs(t-r.toplam)<=Math.max(1,s.length); return `<div class="${ok?"pos":"neg"}">Faturanın KDV dahil toplamı ${TL(r.toplam)} ${ok?"✓ tutuyor":"— fark "+TL(r.toplam-t)}</div>`; })():`<div class="muted">Faturanın genel toplamıyla karşılaştırın.</div>`}</div>`; };
     document.querySelectorAll(".satir").forEach(d=>{ const x=k[d.dataset.i];
       d.querySelectorAll("[data-k]").forEach(inp=>inp.oninput=inp.onchange=()=>{ const a=inp.dataset.k;
         if (a==="al") { x.al=inp.checked; d.classList.toggle("kapali",!x.al); }
@@ -542,11 +526,12 @@ function vKar(){
       <div class="card"><div class="muted">Maliyet</div><b>${TL(T("maliyet"))}</b></div>
       <div class="card"><div class="muted">Komisyon + ek gider</div><b>${TL(T("kom")+T("gider"))}</b></div>
     </div>
+    ${T("kampPrim")||T("fark")||T("aile")?`<div class="card" style="margin-top:10px"><div class="muted">Profilo’dan gelecek, kâra dahil</div>${T("kampPrim")?`<div class="row sp"><span>Kampanya (bundle) primleri</span><b class="pos">${TL(T("kampPrim"))}</b></div>`:""}${T("fark")?`<div class="row sp"><span>Fiyat farkları</span><b class="pos">${TL(T("fark"))}</b></div>`:""}${T("aile")?`<div class="row sp"><span>Aile Bakanlığı farkları</span><b class="pos">${TL(T("aile"))}</b></div>`:""}</div>`:""}
     <div class="card" style="margin-top:10px"><div class="muted">${yil} alımları ve beklenen yıl sonu primi</div><div class="row sp"><span>Alım tutarı (${alimYil.length} cihaz)</span><b>${TL(alimTop)}</b></div><div class="row sp"><span>Beklenen prim</span><b class="pos">${TL(primYil)}</b></div></div>
     ${Object.keys(kat).length?`<h2>Kategoriye göre</h2><div class="card"><table><tr><th>Kategori</th><th>Adet</th><th style="text-align:right">Kâr</th><th style="text-align:right">Primli</th></tr>${Object.entries(kat).sort((a,b)=>b[1].kar-a[1].kar).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.n}</td><td style="text-align:right" class="${v.kar<0?"neg":"pos"}">${TL(v.kar)}</td><td style="text-align:right">${TL(v.karP)}</td></tr>`).join("")}</table></div>`:""}
     <h2>Satışlar</h2>
     ${sat.length?`<div class="card list">${H.map(([u,h])=>`<div class="it tap" data-p="${u.pid}"><div class="row sp"><div><b>${esc(pAd(P(u.pid)))}</b><div class="muted">${trDate(u.satis.tarih)} · seri ${esc(u.seri||"—")} · ${ODEME[u.satis.odeme]||""}</div></div><div class="sag"><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b><div class="muted">${TL(u.satis.tutar)}</div></div></div></div>`).join("")}</div>`:`<div class="empty">Bu dönemde satış yok.</div>`}
-    <div class="muted" style="margin-top:8px">Tüm tutarlar KDV dahil. Kâr = satış − maliyet − kart komisyonu − ek gider. Primli kâr, cihazın yıl sonu primini de ekler.</div>`;
+    <div class="muted" style="margin-top:8px">Tüm tutarlar KDV dahil. Kâr = satış − maliyet − komisyon − ek gider + kampanya primi + fiyat farkı. Primli kâr, cihazın yıl sonu primini de ekler.</div>`;
   $("#ay").onchange=e=>{ durum.ay=e.target.value; vKar(); };
   main.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
 }
@@ -566,7 +551,21 @@ function vDiger(){
       <div class="muted">Her ay gelen “Toptan Fiyat Listesi” Excel’ini seçin. Yüklenince her üründe “şu an alsa” fiyatı ve geçen aya göre değişim görünür.</div>
       <input type="file" id="fListe" accept=".xlsx,.xls">
       ${db.listeler.length>1?`<div class="muted" style="margin-top:8px">Önceki listeler: ${db.listeler.slice(1).map(l=>esc(l.ad)).join(", ")}</div>`:""}
+      ${db.listeler.length>1?`<button class="b2" id="fDeg" style="width:100%;margin-top:8px">Son fiyat değişimlerini göster</button>`:""}
       ${db.listeler.length?`<button class="b2 red" id="fSil" style="width:100%;margin-top:8px">Güncel listeyi sil</button>`:""}</div>
+    <div class="card"><h3>Profilo kampanyaları</h3>
+      ${aktifKampanyalar().length?`<div class="list">${aktifKampanyalar().map(k=>`<div class="it"><div class="row sp"><div><b>${esc(k.ad)}</b><div class="muted">${esc(k.ay||"")}${kampanyaEksik(k)?` · <span class="neg">${esc(kampanyaEksik(k))}</span>`:""}</div></div><div class="sag"><b class="pos">+${TL(k.prim)}</b><div class="muted">bayi primi</div></div></div></div>`).join("")}</div>
+        <button class="b2" id="kmpDuz" style="width:100%;margin-top:8px">Kampanyaları düzenle</button>`:`<div class="muted">Aktif kampanya yok.</div>`}
+      <div class="muted" style="margin-top:8px">Her ay gelen kampanya Word dokümanını (.docx) seçin.</div>
+      <input type="file" id="kmpDosya" accept=".docx"></div>
+    <div class="card"><h3>Profilo fiyat farkları (aylık)</h3>
+      ${db.fiyatFarki?`<div class="row sp"><span>Güncel: <b>${esc(db.fiyatFarki.ad)}</b></span><span class="muted">${Object.keys(db.fiyatFarki.k).length} model</span></div><div class="muted">${trDate(db.fiyatFarki.bas)} – ${trDate(db.fiyatFarki.bit)} arası satışlarda kâra eklenir${Object.keys(db.fiyatFarki.aile).length?` · Aile Bakanlığı: ${Object.keys(db.fiyatFarki.aile).length} model`:""}</div>`:`<div class="muted">Henüz yüklenmedi.</div>`}
+      <div class="muted">Her ay gelen “Fiyat Farkları” Excel’ini seçin.</div>
+      <input type="file" id="ffDosya" accept=".xlsx,.xls"></div>
+    <div class="card"><h3>Banka komisyon oranları (aylık)</h3>
+      ${db.bankalar?`<div class="row sp"><span>Güncel: <b>${esc(db.bankalar.ad)}</b></span><span class="muted">${db.bankalar.secenekler.length} seçenek</span></div>`:`<div class="muted">Henüz yüklenmedi; elle girilen oranlar kullanılıyor.</div>`}
+      <div class="muted">BSH’nin aylık “Banka Komisyon Oranları” Excel’ini seçin. Oranları Ayarlar’dan elle de değiştirebilirsiniz.</div>
+      <input type="file" id="bDosya" accept=".xlsx,.xls"></div>
     <div class="card"><h3>Diva’dan satışları yükle</h3><div class="muted">Diva’nın günlük satış raporunu Excel olarak alın ve buradan seçin. Satışlar seri no ya da model koduyla stoktaki cihazlara eşlenir; aynı satır iki kez yüklenmez.</div>
       <input type="file" id="satisDosya" accept=".xlsx,.xls,.csv,text/csv"></div>
     <div class="card"><h3>Listeden yükle</h3><div class="muted">Mevcut stok listesi: Excel (.xlsx) ya da CSV. Sütunları siz eşleştirirsiniz.</div>
@@ -576,7 +575,12 @@ function vDiger(){
       <div class="muted">Ürüne özel prim oranı ürün düzenleme ekranından girilir.</div>
       <label>Komisyon oranları %</label>
       <div class="row">${Object.entries(ODEME).map(([k,v])=>`<div><div class="muted">${v}</div><input data-kom="${k}" inputmode="decimal" value="${virgul(s.kom[k])}"></div>`).join("")}</div>
-      <label>Claude API anahtarı (fatura okuma için)</label><input id="aKey" type="password" autocomplete="off" value="${esc(s.apiKey)}" placeholder="sk-ant-…">
+      <label>Taksit oranları — varsayılan banka</label><select id="aBanka">${bankaOps(s.banka)}</select>
+      <div class="muted">Taksit hesabında ve satışta önce bu seçilir. Aşağıdaki oranları (toplam kesinti %) değiştirip kaydedebilirsiniz.</div>
+      <div class="row" style="flex-wrap:wrap">${taksitSayilari(varsayilanBanka()).map(n=>`<div style="flex:0 0 30%"><div class="muted">${n} ${varsayilanBanka().tur==="kredi"?"ay":"taksit"}</div><input data-tk="${n}" inputmode="decimal" value="${virgul(varsayilanBanka().oran[n])}"></div>`).join("")}</div>
+      ${varsayilanBanka().id==="elle"&&s.taksitOrnek?'<div class="muted neg">Elle oranlar örnek; düzeltip kaydedin ya da banka dosyasını yükleyin.</div>':""}
+      <label>Tekliflerde görünen firma adı</label><input id="aFirma" value="${esc(s.firma||"")}">
+      <label>Claude API anahtarı (fatura fotoğrafı okuma için; e-fatura PDF’i anahtarsız okunur)</label><input id="aKey" type="password" autocomplete="off" value="${esc(s.apiKey)}" placeholder="sk-ant-…">
       <div class="muted">Anahtar yalnız bu telefonda saklanır; fatura görüntüsü okunmak için Anthropic’e gönderilir.</div>
       <button class="b" id="aKay">Ayarları kaydet</button></div>
     <div class="card"><div class="muted">${db.products.length} ürün · ${db.units.length} cihaz kaydı · ${db.units.filter(u=>u.satis).length} satış</div>
@@ -585,7 +589,10 @@ function vDiger(){
   $("#hepsiSil").onclick=()=>{ if (!db.products.length && !db.units.length) return toast("Silinecek kayıt yok");
     if (!confirm(`${db.products.length} ürün ve ${db.units.length} cihaz kaydı (satışlar dahil) silinsin mi? Bu geri alınamaz.`)) return;
     kayitlariSil(); save(); toast("Bütün kayıtlar silindi"); vDiger(); };
-  $("#aKay").onclick=()=>{ s.marj=num($("#aMarj").value); s.prim=num($("#aPrim").value); s.apiKey=$("#aKey").value.trim(); durum.marj=s.marj; main.querySelectorAll("[data-kom]").forEach(i=>s.kom[i.dataset.kom]=num(i.value)); save(); toast("Kaydedildi"); };
+  $("#aKay").onclick=()=>{ s.marj=num($("#aMarj").value); s.prim=num($("#aPrim").value); s.apiKey=$("#aKey").value.trim(); durum.marj=s.marj; main.querySelectorAll("[data-kom]").forEach(i=>s.kom[i.dataset.kom]=num(i.value));
+    const B = varsayilanBanka(); main.querySelectorAll("[data-tk]").forEach(i=>B.oran[i.dataset.tk]=num(i.value)); if (B.id==="elle") s.taksitOrnek=false;
+    s.firma=$("#aFirma").value.trim(); save(); toast("Kaydedildi"); vDiger(); };
+  $("#aBanka").onchange=e=>{ s.banka=e.target.value; save(); vDiger(); };
   $("#yJson").onclick=()=>{ const kopya = { ...db, settings:{ ...db.settings, apiKey:"" } };
     indir(new Blob([JSON.stringify(kopya,null,1)],{type:"application/json"}), `bayi-defteri-yedek-${today()}.json`); try{ localStorage.setItem(KEY+".yedek", today()); }catch(e){} };
   $("#yXls").onclick=excelIndir;
@@ -597,13 +604,18 @@ function vDiger(){
   $("#liste").onchange=e=>{ const f=e.target.files[0]; if(f) listeOku(f); e.target.value=""; };
   $("#satisDosya").onchange=e=>{ const f=e.target.files[0]; if(f) satisOku(f); e.target.value=""; };
   $("#fListe").onchange=e=>{ const f=e.target.files[0]; if(f) fiyatListesiOku(f); e.target.value=""; };
+  if ($("#fDeg")) $("#fDeg").onclick=degisimOzet;
+  if ($("#kmpDuz")) $("#kmpDuz").onclick=()=>kampanyaOnay(aktifKampanyalar(), true);
+  $("#kmpDosya").onchange=e=>{ const f=e.target.files[0]; if(f) kampanyaDosyaOku(f); e.target.value=""; };
+  $("#ffDosya").onchange=e=>{ const f=e.target.files[0]; if(f) fiyatFarkiOku(f); e.target.value=""; };
+  $("#bDosya").onchange=e=>{ const f=e.target.files[0]; if(f) bankaDosyaOku(f); e.target.value=""; };
   if ($("#fSil")) $("#fSil").onclick=()=>{ if(!confirm(`“${guncelListe().ad}” listesi silinsin mi?`)) return; db.listeler.shift(); save(); vDiger(); };
 }
 
 /* Profilo toptan fiyat listesi: her sayfada "Ürün" başlık satırı, B sütunu model, "fiyat" geçen ilk iki sütun nakit/vadeli */
 const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 function listeKategori(s){ s = s.toLocaleUpperCase("tr");
-  const t = [[/MİKRODALGA/,"Mikrodalga fırın"],[/BUZDOLAP/,"Buzdolabı"],[/DERİN DONDURUCU/,"Derin dondurucu"],[/ÇAMAŞIR/,"Çamaşır makinesi"],[/KURUTMA/,"Kurutma makinesi"],[/BULAŞIK/,"Bulaşık makinesi"],[/FIRIN/,"Fırın"],[/OCAK/,"Ocak"],[/DAVLUMBAZ|ASPİRATÖR/,"Davlumbaz"],[/KLİMA|ÜNİTE|BTU/,"Klima"],[/SÜPÜRGE|TORBA/,"Süpürge"],[/SET/,"Ankastre set"],[/SEBİL/,"Su sebili"]];
+  const t = [[/TELEVİZYON|\bTV\b|QLED|OLED/,"Televizyon"],[/ISI POMPALI/,"Kurutma makinesi"],[/KULAKLIK/,"Küçük ev aleti"],[/MİKRODALGA/,"Mikrodalga fırın"],[/BUZDOLA[BP]/,"Buzdolabı"],[/DERİN DONDURUCU/,"Derin dondurucu"],[/ÇAMAŞIR/,"Çamaşır makinesi"],[/KURUTMA/,"Kurutma makinesi"],[/BULAŞIK/,"Bulaşık makinesi"],[/FIRIN/,"Fırın"],[/OCAK/,"Ocak"],[/DAVLUMBAZ|ASPİRATÖR/,"Davlumbaz"],[/KLİMA|ÜNİTE|BTU/,"Klima"],[/SÜPÜRGE|TORBA/,"Süpürge"],[/SET/,"Ankastre set"],[/SEBİL/,"Su sebili"]];
   for (const [r,k] of t) if (r.test(s)) return k; return "Küçük ev aleti"; }
 function profiloListesiCoz(wb){
   const sayfalar = [], k = {}, kat = {}; let tarih = "", kdvDahil = true;
@@ -612,7 +624,7 @@ function profiloListesiCoz(wb){
     rows.forEach(r=>{
       const b = String(r[1]??"").trim(), c = String(r[2]??"").trim();
       const t = r.map(x=>String(x)).join(" "), m = t.match(/(\d{2})\.(\d{2})\.(\d{4}) TARİHİNDEN/i); if (m && !tarih) tarih = `${m[3]}-${m[2]}-${m[1]}`;
-      if (/KDV dahil değil|KDV hariç/i.test(t)) kdvDahil = false;
+      if (/kdv dahil değil|kdv hariç/.test(trk(t))) kdvDahil = false;
       const fiy = r.map((x,i)=>i>1 && String(x).toLocaleLowerCase("tr").includes("fiyat") ? i : -1).filter(i=>i>=0);
       if (/^ürün( kodu)?$/i.test(b.toLocaleLowerCase("tr")) && fiy.length) { pc = fiy.slice(0,2); return; }
       if (!pc || !b) return;
@@ -621,7 +633,7 @@ function profiloListesiCoz(wb){
         const key = normModel(b); n++;
         if (k[key]) { cift++; if (!kat[key].ad && c) Object.assign(kat[key], { ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori:listeKategori(ana+" "+alt+" "+b) }); return; }
         k[key] = { n:r2(nak), v: typeof r[pc[1]]==="number" ? r2(r[pc[1]]) : null };
-        kat[key] = { model:b, ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori: /klima/i.test(ad) ? "Klima" : listeKategori(ana+" "+alt+" "+b), sayfa:ad };
+        kat[key] = { model:b, ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori: /klima/i.test(ad) ? "Klima" : listeKategori(ana+" "+alt+" "+b), sayfa:ad, grup:(ana+" "+alt).trim() };
       } else if (/GENEL ÜRÜN AÇIKLAMASI/i.test(c) && b !== b.toLocaleUpperCase("tr")) alt = b;
       else if (b === b.toLocaleUpperCase("tr") && !/\d/.test(b) && !/FİYAT|VALÖR|ÜRÜN/.test(b)) { ana = b; alt = ""; }
     });
@@ -649,7 +661,7 @@ async function fiyatListesiOku(f){
     const k = {}; for (const m in r.k) k[m] = { n:r2(r.k[m].n*c), v:r.k[m].v?r2(r.k[m].v*c):null };
     db.listeler = db.listeler.filter(l=>l.tarih!==tar); db.listeler.push({ id:uid(), ad, tarih:tar, yuklendi:today(), k });
     db.listeler.sort((a,b)=>b.tarih.localeCompare(a.tarih)); db.listeler = db.listeler.slice(0,24);
-    Object.assign(db.katalog, r.kat); save(); sheetKapat(); toast(`${ad} listesi yüklendi · ${Object.keys(k).length} ürün`); vDiger();
+    Object.assign(db.katalog, r.kat); save(); toast(`${ad} listesi yüklendi · ${Object.keys(k).length} ürün`); vDiger(); if (db.listeler[0].tarih===tar && db.listeler.length>1) degisimOzet(); else sheetKapat();
   };
 }
 function indir(blob, ad){
@@ -689,7 +701,9 @@ async function tabloOku(f){
   let bas = rows.findIndex(r=>r.filter(c=>typeof c==="string"&&c.trim()).length>=2); if (bas<0) bas=0;
   return { baslik: rows[bas].map((c,i)=>String(c).trim()||`Sütun ${i+1}`), veri: rows.slice(bas+1) };
 }
-const tarihOku = t => t instanceof Date ? t.toISOString().slice(0,10) : (/^\d{1,2}[./]\d{1,2}[./]\d{4}/.test(String(t).trim()) ? String(t).trim().slice(0,10).split(/[./]/).reverse().map(x=>x.padStart(2,"0")).join("-") : (/^\d{4}-\d{2}-\d{2}/.test(String(t)) ? String(t).slice(0,10) : ""));
+const trk = s => String(s??"").toLocaleLowerCase("tr"); // Türkçe İ/ı ile güvenli küçük harf
+const yerelTarih = d => { d = new Date(d.getTime() + 12*3600e3); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }; // Excel tarihi saat dilimiyle kaymasın
+const tarihOku = t => t instanceof Date ? yerelTarih(t) : (/^\d{1,2}[./]\d{1,2}[./]\d{4}/.test(String(t).trim()) ? String(t).trim().slice(0,10).split(/[./]/).reverse().map(x=>x.padStart(2,"0")).join("-") : (/^\d{4}-\d{2}-\d{2}/.test(String(t)) ? String(t).slice(0,10) : ""));
 
 /* Diva satış raporu içe aktarma */
 const S_ALANLAR = [["model","Model / stok kodu *"],["seri","Seri no"],["tutar","Satış tutarı (satır toplamı)"],["adet","Adet"],["tarih","Tarih"],["belge","Fiş / fatura no"],["odeme","Ödeme şekli"],["musteri","Müşteri"]];
@@ -726,15 +740,22 @@ async function satisOku(f){
         es_.push({ u, satis:{ tarih, tutar:r2(toplam/adet), odeme:odemeTahmin(g(r,"odeme")), gider:0, musteri:String(g(r,"musteri")).trim(), not:belge?"Diva "+belge:"Diva", kaynak } });
       }
     });
-    es_.forEach(x=>{ x.satis.komOran=db.settings.kom[x.satis.odeme]||0; x.satis.kom=r2(x.satis.tutar*x.satis.komOran/100); });
-    return { es:es_, eslesmedi, zaten };
+    es_.forEach(x=>{ x.satis.komOran=db.settings.kom[x.satis.odeme]||0; x.satis.kom=r2(x.satis.tutar*x.satis.komOran/100);
+      const f = farkBilgi(P(x.u.pid).model, x.satis.tarih); x.satis.fark = f && f.icinde ? f.tutar : 0; }); // Diva e-Logo faturası fiyat farkı şartını karşılar
+    /* Aynı fişteki cihazlar bir kampanyaya uyuyorsa öner */
+    const fis = {}; es_.forEach(x=>{ const b=x.satis.not; if (b && b!=="Diva") (fis[b] ||= []).push(x); });
+    const oneri = []; Object.entries(fis).forEach(([b,xs])=>{ if (xs.length<2) return; const k = aktifKampanyalar().find(k=>kampanyaUyar(k, xs.map(x=>x.u))); if (k) oneri.push({ belge:b.replace(/^Diva /,""), k, xs }); });
+    return { es:es_, eslesmedi, zaten, oneri };
   };
   const on = () => { const h=hazirla(), kar=h.es.reduce((a,x)=>a+satisHesap(x.u,x.satis).kar,0);
     $("#sOn").innerHTML=`<div class="res"><b>${h.es.length} satış</b> stoktaki cihazla eşleşti · toplam kâr ${TL(kar)}${h.zaten.length?`<br><span class="muted">${h.zaten.length} satır daha önce yüklenmiş, atlanacak</span>`:""}</div>
+      ${h.es.some(x=>x.satis.fark)?`<div class="res" style="background:var(--okbg)">${h.es.filter(x=>x.satis.fark).length} satışa Profilo fiyat farkı eklenecek: +${TL(h.es.reduce((a,x)=>a+(x.satis.fark||0),0))}</div>`:""}
+      ${h.oneri.length?`<div class="res" style="background:var(--brand2)"><b>${h.oneri.length} fiş kampanyaya uyuyor</b> — işaretlenenlere bayi primi eklenir:${h.oneri.map((o,i)=>`<label style="display:flex;gap:8px;align-items:center;margin:6px 0 0"><input type="checkbox" data-oneri="${i}" checked style="width:auto"> Fiş ${esc(o.belge)}: ${esc(o.k.ad)} · ${o.xs.map(x=>esc(P(x.u.pid).model)).join(" + ")} · +${TL(o.k.prim)}</label>`).join("")}</div>`:""}
       ${h.eslesmedi.length?`<div class="res neg"><b>${h.eslesmedi.length} satır eşleşmedi</b> (stokta yok ya da model kodu farklı):<br><span class="muted">${esc(h.eslesmedi.slice(0,15).join(", "))}${h.eslesmedi.length>15?" …":""}</span></div>`:""}`; };
   document.querySelectorAll("[data-es]").forEach(x=>x.onchange=on); on();
   $("#sKay").onclick=()=>{ const h=hazirla(); if(!h.es.length) return alert("Eşleşen satış yok.");
-    h.es.forEach(x=>x.u.satis=x.satis); save(); sheetKapat(); toast(`${h.es.length} satış kaydedildi`); go("kar"); };
+    let km = 0; h.oneri.forEach((o,i)=>{ const c=document.querySelector(`[data-oneri="${i}"]`); if (c && !c.checked) return; o.xs.forEach(x=>{ x.satis.kampanya = { id:o.k.id, ad:o.k.ad, prim:r2(o.k.prim/o.xs.length) }; }); km++; });
+    h.es.forEach(x=>x.u.satis=x.satis); save(); sheetKapat(); toast(`${h.es.length} satış kaydedildi${km?` · ${km} kampanya`:""}`); go("kar"); };
 }
 
 /* Tüm kayıtları sil: ürünler, stok, satışlar. Ayarlar ve fiyat listeleri kalır. */
@@ -758,7 +779,7 @@ function dgGridYukle(baslik, veri, dosyaAdi){
   $("#kapat").onclick=sheetKapat;
   $("#dgKay").onclick=()=>{
     if ($("#dgSil").checked) { if (!confirm(`Mevcut ${db.products.length} ürün ve ${db.units.length} cihaz kaydı silinip yerine bu döküm yüklensin mi?`)) return; kayitlariSil(); }
-    satirlar.forEach(x=>{ const p = urunBulAc({ model:x.model, ad:db.katalog[normModel(x.model)]?.ad || x.ad, kategori:listeKategori(x.tip+" "+x.grup) });
+    satirlar.forEach(x=>{ const p = urunBulAc({ model:x.model, ad:db.katalog[normModel(x.model)]?.ad || x.ad, kategori:db.katalog[normModel(x.model)]?.kategori || listeKategori(x.tip+" "+x.grup) });
       cihazEkle(p, x.adet, [], { gTarih:today(), alis: listeFiyat(x.model)?.n || 0, tedarikci:"Profilo (stok dökümü)" }); });
     save(); sheetKapat(); toast(`${satirlar.length} ürün, ${adet} cihaz yüklendi`); durum.q=""; go("stok");
   };
@@ -788,7 +809,7 @@ async function listeOku(f){
       const anahtar=normModel(model);
       if(!yeniP.has(anahtar)) yeniP.set(anahtar,{ marka:String(g(r,"marka")).trim()||$("#lMarka").value.trim(), model, kategori:String(g(r,"kategori")).trim(), ad:String(g(r,"ad")).trim(), barkod:String(g(r,"barkod")).trim(), liste:fiyat(g(r,"liste"))||null, prim:e.prim>=0&&String(g(r,"prim")).trim()!==""?num(g(r,"prim")):null });
       const alis=fiyat(g(r,"alis")), seri=String(g(r,"seri")).trim();
-      let tarih=g(r,"tarih"); tarih = tarih instanceof Date ? tarih.toISOString().slice(0,10) : (/^\d{1,2}[./]\d{1,2}[./]\d{4}$/.test(String(tarih).trim()) ? String(tarih).trim().split(/[./]/).reverse().map(x=>x.padStart(2,"0")).join("-") : today());
+      let tarih=g(r,"tarih"); tarih = tarih instanceof Date ? yerelTarih(tarih) : (/^\d{1,2}[./]\d{1,2}[./]\d{4}$/.test(String(tarih).trim()) ? String(tarih).trim().split(/[./]/).reverse().map(x=>x.padStart(2,"0")).join("-") : today());
       const n = seri ? 1 : (e.adet>=0 ? Math.max(0, Math.round(num(g(r,"adet")))) : (alis?1:0));
       if (alis && n) birim.push({ anahtar, n, seri, alis, tarih, fatura:String(g(r,"fatura")).trim(), tedarikci:String(g(r,"tedarikci")).trim() });
     });
@@ -803,6 +824,396 @@ async function listeOku(f){
     h.yeniP.forEach((v,k)=>{ const p=urunBulAc(v); for(const a in v) if(v[a]!=null && v[a]!=="") p[a]=v[a]; idler[k]=p; });
     let n=0; h.birim.forEach(b=>{ cihazEkle(idler[b.anahtar], b.n, b.seri?[b.seri]:[], { gTarih:b.tarih, alis:b.alis, fatura:b.fatura, tedarikci:b.tedarikci }); n+=b.n; });
     save(); sheetKapat(); toast(`${h.yeniP.size} ürün, ${n} cihaz yüklendi`); go("stok");
+  };
+}
+
+/* ---------- Dış kütüphaneyi gerektiğinde yükle ---------- */
+const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js", JSZIP = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+const scriptYukle = src => new Promise((ok,no)=>{ if (document.querySelector(`script[src="${src}"]`)) return ok();
+  const s=document.createElement("script"); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("Kütüphane yüklenemedi; internet bağlantısını kontrol edin.")); document.head.appendChild(s); });
+
+/* ---------- Zam / indirim uyarısı: güncel liste ile bir önceki karşılaştırılır ---------- */
+function degisimOran(model){ const y=listeFiyat(model), e=listeFiyat(model,1); return y && e && e.n ? (y.n-e.n)/e.n*100 : 0; }
+const degisimRozet = model => { const o = degisimOran(model); return Math.abs(o)>=0.5 ? `<span class="pill ${o>0?"warn":"ok"}" style="margin-left:4px">${o>0?"▲":"▼"} %${Math.abs(o).toFixed(1)}</span>` : ""; };
+function listeDegisim(){
+  const [y,e] = db.listeler; if (!y || !e) return null;
+  const art=[], dus=[], yeni=[], kalk=[];
+  for (const m in y.k){ const o=e.k[m]; if (!o) yeni.push(m); else if (Math.abs(y.k[m].n-o.n)>=1) (y.k[m].n>o.n?art:dus).push({ m, eski:o.n, yeni:y.k[m].n, oran:(y.k[m].n-o.n)/o.n*100 }); }
+  for (const m in e.k) if (!y.k[m]) kalk.push(m);
+  const stokAdet = m => db.units.filter(u=>!u.satis && normModel(P(u.pid)?.model)===m).length;
+  [art,dus].forEach(l=>l.forEach(x=>{ x.stok=stokAdet(x.m); x.etki=r2(x.stok*(x.yeni-x.eski)); }));
+  return { y, e, art, dus, yeni, kalk:kalk.map(m=>({ m, stok:stokAdet(m) })) };
+}
+function degisimOzet(){
+  const d = listeDegisim(); if (!d) return toast("Karşılaştırmak için en az iki aylık liste gerekir");
+  const ad = m => esc(db.katalog[m]?.model || m);
+  const sA = d.art.filter(x=>x.stok).sort((a,b)=>b.etki-a.etki), sD = d.dus.filter(x=>x.stok).sort((a,b)=>a.etki-b.etki), sK = d.kalk.filter(x=>x.stok);
+  const etki = r2([...sA,...sD].reduce((a,x)=>a+x.etki,0));
+  const tablo = l => `<table><tr><th>Model</th><th style="text-align:right">Eski → yeni</th><th style="text-align:right">Stok</th></tr>${l.slice(0,40).map(x=>`<tr><td>${ad(x.m)}</td><td style="text-align:right">${TL(x.eski)} → ${TL(x.yeni)}<br><span class="${x.oran>0?"neg":"pos"}">${x.oran>0?"+":""}%${x.oran.toFixed(1)}</span></td><td style="text-align:right">${x.stok}</td></tr>`).join("")}</table>`;
+  sheet(`<div class="row sp"><h2 style="margin:0">Fiyat değişimleri</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(d.e.ad)} → ${esc(d.y.ad)}</div>
+    <div class="stat" style="margin-top:10px"><div class="card"><div class="muted">Zamlanan</div><b class="big">${d.art.length}</b></div><div class="card"><div class="muted">İndirime giren</div><b class="big">${d.dus.length}</b></div><div class="card"><div class="muted">Yeni model</div><b class="big">${d.yeni.length}</b></div><div class="card"><div class="muted">Listeden kalkan</div><b class="big">${d.kalk.length}</b></div></div>
+    <div class="res ${etki<0?"neg":""}"><div class="row sp"><span>Stoktaki malın bugünkü değerine etkisi</span><b>${etki>=0?"+":""}${TL(etki)}</b></div><div class="muted">Zamlanan ürünlerde eldeki eski stok artık daha değerli: satış fiyatını yükseltmeyi düşünün.</div></div>
+    ${sA.length?`<h2>Zamlanan, stokta olan (${sA.length})</h2><div class="card">${tablo(sA)}</div>`:""}
+    ${sD.length?`<h2>İndirime giren, stokta olan (${sD.length})</h2><div class="card">${tablo(sD)}</div>`:""}
+    ${sK.length?`<h2>Listeden kalkan ama stokta olan (${sK.length})</h2><div class="card"><div class="muted">Eski model olabilir; elden çıkarmayı düşünün.</div>${sK.map(x=>`<div class="row sp"><span>${ad(x.m)}</span><b>${x.stok} adet</b></div>`).join("")}</div>`:""}
+    ${!sA.length&&!sD.length&&!sK.length?`<div class="empty">Stoktaki ürünlerde fiyat değişimi yok.</div>`:""}`);
+  $("#kapat").onclick=sheetKapat;
+}
+
+/* ---------- Taksitli fiyat ve müşteriye teklif (banka seçilir) ---------- */
+const taksitFiyat = (pesin, n, B) => r2(pesin * (1 - num(db.settings.kom.nakit)/100) / (1 - num(B.oran[n])/100));
+function taksitCiz(el, p, oneri){
+  let bid = varsayilanBanka().id;
+  el.innerHTML = `<div class="row"><div><label>Peşin (nakit) fiyat</label><input id="tkPesin" inputmode="decimal" value="${virgul(oneri)}"></div><div><label>Banka / kredi</label><select id="tkBanka">${bankaOps(bid)}</select></div></div>
+    <div id="tkTablo"></div>
+    <button class="b2" id="tkPaylas" style="width:100%;margin-top:8px">Müşteriye teklif gönder</button>`;
+  const secenek = P0 => { const B = bankaBul(bid); let ns = taksitSayilari(B), not = "";
+    if (p.kategori==="Televizyon" && P0>5000 && B.tur==="kart") { ns = ns.filter(n=>n<=4); not = "Fiyatı 5.000 ₺ üzeri televizyonda kartla en çok 4 taksit yapılabilir."; }
+    return { B, ns, not }; };
+  const ciz = () => { const P0 = r2(num($("#tkPesin").value)), { B, ns, not } = secenek(P0), bir = B.tur==="kredi" ? "ay" : "taksit";
+    $("#tkTablo").innerHTML = `<table><tr><th>Ödeme</th><th style="text-align:right">Aylık</th><th style="text-align:right">Toplam</th></tr><tr><td>Peşin</td><td></td><td style="text-align:right"><b>${TL(P0)}</b></td></tr>${ns.map(n=>{ const t=taksitFiyat(P0,n,B); return `<tr><td>${n} ${bir} <span class="muted">%${virgul(B.oran[n])}</span></td><td style="text-align:right">${TL(t/n)}</td><td style="text-align:right">${TL(t)}</td></tr>`; }).join("")}</table>
+      <div class="muted">${not?esc(not)+" ":""}Taksit fiyatı, banka kesintisinden sonra peşinle aynı parayı bırakacak şekilde hesaplanır.${B.id===ELLE&&db.settings.taksitOrnek?" Oranlar örnek; Ayarlar’dan düzeltin.":""}</div>`; };
+  $("#tkPesin").oninput = ciz; $("#tkBanka").onchange = e=>{ bid = e.target.value; ciz(); }; ciz();
+  $("#tkPaylas").onclick = async () => {
+    const P0 = r2(num($("#tkPesin").value)), { B, ns } = secenek(P0), ad = db.katalog[normModel(p.model)]?.ad || p.ad || "", bir = B.tur==="kredi" ? "ay" : "taksit";
+    const metin = [`${db.settings.firma||""} · Fiyat teklifi (${trDate(today())})`, `${[p.marka,p.model].filter(Boolean).join(" ")}`, ad ? ad.slice(0,120) : null, "",
+      `Peşin: ${TL(P0)}`, ...ns.map(n=>{ const t=taksitFiyat(P0,n,B); return `${n} ${bir}: ${n} × ${TL(t/n)} = ${TL(t)}`; }), "", "Fiyatlara KDV dahildir."].filter(x=>x!==null).join("\n");
+    try { if (navigator.share) await navigator.share({ text: metin }); else { await navigator.clipboard.writeText(metin); toast("Teklif metni kopyalandı"); } }
+    catch(e){ if (e && e.name!=="AbortError") { try { await navigator.clipboard.writeText(metin); toast("Teklif metni kopyalandı"); } catch(_) { alert(metin); } } }
+  };
+}
+
+/* ---------- e-Fatura PDF'ini yerelde okuma (metinli PDF; taranmış değil) ---------- */
+async function pdfSatirlar(f){
+  await scriptYukle(PDFJS); pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS.replace("pdf.min.js","pdf.worker.min.js");
+  const doc = await pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise, sayfalar = [];
+  for (let i=1;i<=doc.numPages;i++){ const tc = await (await doc.getPage(i)).getTextContent(); sayfalar.push(tc.items.filter(t=>t.str.trim()).map(t=>({ x:t.transform[4], y:t.transform[5], s:t.str.trim() }))); }
+  return sayfalar;
+}
+const MARKALAR = ["Profilo","Bosch","Siemens","Grundig","Arçelik","Beko","Vestel","Samsung","LG","Regal","Altus","Electrolux","Indesit","Hotpoint","Miele","Philips","Sony","TCL","Toshiba","Hitachi","Simfer","Luxell","Fakir","Tefal","Arzum","Sinbo","Kumtel","Uğur","Neff","Gaggenau"];
+/* "Grundig GPWM 91624 RS 9 kg Çamaşır Makinesi" → marka Grundig, model "GPWM 91624 RS" */
+function adModel(ad){
+  let tk = ad.split(/\s+/).filter(Boolean), marka = "";
+  const m = MARKALAR.find(x=>x.toLocaleLowerCase("tr")===(tk[0]||"").toLocaleLowerCase("tr")); if (m) { marka = m; tk = tk.slice(1); }
+  const mod = []; for (const t of tk){ if (/["”″]/.test(t) || /[a-zçğıöşü]/.test(t)) break; mod.push(t); }
+  if (mod.length>1 && /^\d{1,2}$/.test(mod[mod.length-1])) mod.pop(); // "… RS 9 kg", "… E 5 Programlı"
+  return { marka, model: mod.join(" ") };
+}
+const PARA = /^-?[\d.]+,\d{2,}(\s*TL)?$/i;
+function efaturaCoz(sayfalar){
+  const kucuk = s => s.replace(/\s+/g," ").toLocaleLowerCase("tr");
+  const deger = etiket => { for (const pg of sayfalar){ const e = pg.find(t=>kucuk(t.s).startsWith(etiket)); if (!e) continue;
+      const ici = e.s.split(":").slice(1).join(":").trim(); if (ici) return ici;
+      const v = pg.filter(t=>Math.abs(t.y-e.y)<3 && t.x>e.x).sort((a,b)=>a.x-b.x)[0]; return v ? v.s : ""; } return ""; };
+  const kalemler = [];
+  for (const pg of sayfalar){
+    const bas = pg.find(t=>/^miktar$/i.test(t.s)); if (!bas) continue;
+    const capalar = [];
+    pg.forEach(t=>{ const m = t.s.match(/^([\d.]+(?:,\d+)?)\s*(adet|ad\.?)$/i);
+      if (m) capalar.push({ x:t.x, y:t.y, miktar:num(m[1]) });
+      else if (/^(adet|ad\.?)$/i.test(t.s)) { const n = pg.filter(o=>Math.abs(o.y-t.y)<2.5 && o.x<t.x && /^[\d.]+(,\d+)?$/.test(o.s)).sort((a,b)=>b.x-a.x)[0]; if (n) capalar.push({ x:n.x, y:t.y, miktar:num(n.s) }); } });
+    capalar.filter(c=>c.y < bas.y-3).forEach(c=>{
+      const satir = pg.filter(t=>Math.abs(t.y-c.y)<2.5);
+      const kdvT = satir.find(t=>/^%\s*\d/.test(t.s)), kdv = kdvT ? num(kdvT.s.replace("%","")) : 20;
+      const tutarT = satir.filter(t=>PARA.test(t.s) && t.x>c.x).sort((a,b)=>b.x-a.x)[0]; if (!tutarT || !c.miktar) return;
+      const adParca = pg.filter(t=>t.x < c.x-2 && t.y < bas.y-3 && !(/^\d+$/.test(t.s) && t.x < c.x*0.35))
+        .filter(t=>{ const yakin = capalar.reduce((a,o)=>Math.abs(o.y-t.y)<Math.abs(a.y-t.y)?o:a); return yakin===c && Math.abs(c.y-t.y)<=12; })
+        .sort((a,b)=>b.y-a.y || a.x-b.x).map(t=>t.s);
+      const tamAd = adParca.join(" ").replace(/\s+/g," ").trim(), am = adModel(tamAd);
+      kalemler.push({ model: am.model || tamAd.slice(0,30), aciklama: tamAd, marka: am.marka, kategori: listeKategori(tamAd), adet: Math.round(c.miktar),
+        birim_fiyat_kdv_dahil: r2(num(tutarT.s.replace(/TL/i,"")) / c.miktar * (1+kdv/100)), seri_nolar: [] });
+    });
+  }
+  if (!kalemler.length) return null;
+  const tm = deger("fatura tarihi").match(/(\d{2})[-./](\d{2})[-./](\d{4})/);
+  const toplamS = deger("vergiler dahil toplam") || deger("ödenecek tutar");
+  const ust = sayfalar[0].slice().sort((a,b)=>b.y-a.y)[0];
+  return { yerel:true, fatura_no: deger("fatura no"), tarih: tm ? `${tm[3]}-${tm[2]}-${tm[1]}` : "", tedarikci: ust ? ust.s : "", not:"", toplam: toplamS ? num(toplamS.replace(/TL/i,"")) : 0, kalemler };
+}
+
+/* ---------- Profilo kampanya dokümanı (.docx) ---------- */
+const LDA = ["Buzdolabı","Çamaşır makinesi","Bulaşık makinesi","Kurutma makinesi","Derin dondurucu"];
+const aktifKampanyalar = () => db.kampanyalar.filter(k=>k.aktif);
+async function docxBloklar(f){
+  await scriptYukle(JSZIP);
+  const z = await JSZip.loadAsync(await f.arrayBuffer()), xml = await z.file("word/document.xml").async("string");
+  const d = new DOMParser().parseFromString(xml, "application/xml"), W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+  const metin = el => [...el.getElementsByTagNameNS(W,"t")].map(t=>t.textContent).join("").replace(/\s+/g," ").trim();
+  const bl = [];
+  for (const c of d.getElementsByTagNameNS(W,"body")[0].children){
+    if (c.localName==="p") { const t = metin(c); if (t) bl.push({ p:t }); }
+    else if (c.localName==="tbl") bl.push({ t:[...c.children].filter(x=>x.localName==="tr").map(tr=>[...tr.children].filter(x=>x.localName==="tc").map(metin)) });
+  }
+  return bl;
+}
+function kampanyaKural(baslik, ad, aciklama){
+  const b = (baslik+" "+ad).toLocaleLowerCase("tr"), t = (baslik+" "+ad+" "+aciklama).toLocaleLowerCase("tr");
+  if (/kurutma/.test(t) && /çamaşır/.test(t)) return { gruplar:[{ ad:"Kurutma makinesi", kat:["Kurutma makinesi"], modeller:[], adet:1 }, { ad:"Çamaşır makinesi", kat:["Çamaşır makinesi"], modeller:[], adet:1 }], haricXL:false };
+  if (/televizyon|\btv\b/.test(b)) return { gruplar:[{ ad:"Televizyon", kat:[], modeller:[], adet:1 }, { ad:"Hediye Türk kahve makinesi", kat:[], modeller:[], adet:1 }], haricXL:false };
+  if (/ankastre|\bset\b/.test(b)) return { gruplar:[{ ad:"Fırın", kat:["Fırın"], modeller:[], adet:1 }, { ad:"Ocak / davlumbaz", kat:["Ocak","Davlumbaz"], modeller:[], adet:1, enFazla:2 }], haricXL:false };
+  return { gruplar:[{ ad:"Beyaz eşya", kat:LDA, modeller:[], adet:2 }], haricXL:/\bxx?l\b/.test(t) };
+}
+const MODEL_KOD = /^[A-ZÇĞİÖŞÜ]{2,}[A-Z0-9]*\d[A-Z0-9]*$/;
+function kampanyaCoz(bl){
+  const ks = [], basMetin = []; let bid = -1, tablo = 0;
+  const yeniBaslik = t => { bid++; basMetin[bid] = { baslik:t.replace(/^kampanya\s*\d*\s*:\s*/i,"").trim(), metin:[] }; };
+  for (const b of bl){
+    if (b.p) { if (/^kampanya\b[^:]*:/i.test(b.p)) yeniBaslik(b.p); else if (bid>=0) basMetin[bid].metin.push(b.p); continue; }
+    tablo++;
+    for (const r of b.t){
+      const ilk = r.find(c=>c) || "";
+      if (/^kampanya\b[^:]*:/i.test(ilk)) { yeniBaslik(ilk); continue; }
+      const tutarlar = r.filter(c=>/₺/.test(c) && /\d/.test(c)).map(c=>num(c.replace(/₺|TL/g,""))); // tablo tutarları ₺ ile; "10.000 TL indirim" gibi açıklamalar sayılmaz
+      if (tutarlar.length && ilk && !/kampanya adı/i.test(ilk) && !/₺/.test(ilk)) { ks.push({ ad:ilk.replace(/\s*\*$/,""), bid, tablo, indirim: tutarlar.length>1 ? tutarlar[0] : null, primHaric: tutarlar[tutarlar.length-1], modeller:[] }); continue; }
+      if (r.some(c=>MODEL_KOD.test(c))) {
+        const seg = []; let cur = []; r.forEach(c=>{ if (MODEL_KOD.test(c)) cur.push(c); else if (cur.length) { seg.push(cur); cur=[]; } }); if (cur.length) seg.push(cur);
+        const buTablo = ks.filter(k=>k.tablo===tablo); if (!buTablo.length) continue;
+        seg.forEach((sg,i)=>(buTablo[i] || buTablo[buTablo.length-1]).modeller.push(...sg));
+      } else if (bid>=0 && ilk && !/kampanya adı|k\.d\.v/i.test(ilk)) basMetin[bid].metin.push(r.filter(Boolean).join(" "));
+    }
+  }
+  return ks.map(k=>{ const bm = basMetin[k.bid] || { baslik:"", metin:[] }, aciklama = bm.metin.join(" ").slice(0,400), kural = kampanyaKural(bm.baslik, k.ad, aciklama);
+    if (k.modeller.length) kural.gruplar[0].modeller = [...new Set(k.modeller)];
+    return { id:uid(), ad:k.ad, baslik:bm.baslik, aciklama, indirim:k.indirim, primHaric:r2(k.primHaric), prim:r2(k.primHaric*1.2), aktif:true, ...kural }; });
+}
+async function kampanyaDosyaOku(f){
+  let ks; try { ks = kampanyaCoz(await docxBloklar(f)); } catch(e){ return alert("Doküman okunamadı: "+(e.message||e)); }
+  if (!ks.length) return alert("Bu dokümanda kampanya tablosu (kampanya adı + ₺ tutarlar) bulunamadı.");
+  const m = f.name.match(new RegExp("("+AYLAR.join("|")+")\\s*(\\d{4})","i")), ay = m ? m[1]+" "+m[2] : "";
+  ks.forEach(k=>k.ay=ay); kampanyaOnay(ks, false);
+}
+const kampanyaEksik = k => { const g = k.gruplar.find(g=>!g.kat.length && !g.modeller.length); return g ? `“${g.ad}” için model listesi girilmeli` : ""; };
+function kampanyaOnay(ks, duzenle){
+  const ciz = () => {
+    sheet(`<div class="row sp"><h2 style="margin:0">${duzenle?"Kampanyaları düzenle":"Kampanyaları kontrol edin"}</h2><button class="mini" id="kapat" style="flex:0 0 auto">Vazgeç</button></div>
+      <div class="muted">Kâra yalnız bayi bundle primi eklenir (KDV hariç tutar × 1,2). Perakende indirim bilgi amaçlı. Model listesi yazılan grupta yalnız o modeller, boşsa seçili kategoriler geçerlidir.</div>
+      ${ks.map((k,i)=>`<div class="satir ${k.aktif?"":"kapali"}" data-i="${i}">
+        <div class="row sp"><b>${i+1}.</b><label style="flex:0 0 auto;margin:0"><input type="checkbox" data-k="aktif" ${k.aktif?"checked":""} style="width:auto"> aktif</label></div>
+        <label>Kampanya adı</label><input data-k="ad" value="${esc(k.ad)}">
+        <div class="row"><div><label>Bayi primi (KDV hariç)</label><input data-k="primHaric" inputmode="decimal" value="${virgul(k.primHaric)}"></div><div><label>Kâra eklenen (KDV dahil)</label><input disabled data-goster="prim" value="${TL(k.prim)}"></div></div>
+        ${k.indirim?`<div class="muted">Müşteriye perakende indirim: ${TL(k.indirim)} (hesaba girmez)</div>`:""}
+        ${k.aciklama?`<div class="muted">${esc(k.aciklama.slice(0,220))}</div>`:""}
+        ${k.gruplar.map((g,j)=>`<div style="border-left:3px solid var(--brand2);padding-left:8px;margin-top:8px"><b>${esc(g.ad)}</b> · ${g.adet}${g.enFazla?"–"+g.enFazla:""} adet
+          <label>Kategoriler (virgülle)</label><input data-g="${j}" data-gk="kat" value="${esc(g.kat.join(", "))}" list="kategoriler">
+          <label>Model listesi (boşluk ya da satırla ayırın)</label><textarea data-g="${j}" data-gk="modeller" style="min-height:44px" placeholder="${g.kat.length?"Boş bırakılırsa kategorideki tüm modeller":"Dokümandaki resimden modelleri yazın"}">${esc(g.modeller.join(" "))}</textarea></div>`).join("")}
+        ${k.haricXL?`<div class="muted">XL / XXL modeller hariç tutulur.</div>`:""}
+        ${kampanyaEksik(k)?`<div class="res neg">${esc(kampanyaEksik(k))}</div>`:""}
+      </div>`).join("")}
+      <datalist id="kategoriler">${KATEGORI.map(m=>`<option value="${esc(m)}">`).join("")}</datalist>
+      ${duzenle?"":`<label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="kmpEski" checked style="width:auto"> Önceki kampanyaları pasif yap</label>`}
+      <button class="b" id="kmpKay">Kaydet</button>`);
+    document.querySelectorAll(".satir").forEach(d=>{ const k = ks[d.dataset.i];
+      d.querySelectorAll("[data-k]").forEach(inp=>inp.oninput=inp.onchange=()=>{ const a=inp.dataset.k;
+        if (a==="aktif") { k.aktif=inp.checked; d.classList.toggle("kapali",!k.aktif); }
+        else if (a==="primHaric") { k.primHaric=r2(num(inp.value)); k.prim=r2(k.primHaric*1.2); d.querySelector('[data-goster="prim"]').value=TL(k.prim); }
+        else k[a]=inp.value; });
+      d.querySelectorAll("[data-g]").forEach(inp=>inp.oninput=()=>{ const g=k.gruplar[inp.dataset.g];
+        if (inp.dataset.gk==="kat") g.kat = inp.value.split(",").map(x=>x.trim()).filter(Boolean);
+        else g.modeller = [...new Set(inp.value.toLocaleUpperCase("tr").split(/[\s,;]+/).filter(Boolean))]; }); });
+    $("#kapat").onclick=()=>{ if (duzenle || confirm("Okunan kampanyalar kaydedilmeden kapatılsın mı?")) sheetKapat(); };
+    $("#kmpKay").onclick=()=>{
+      if (!duzenle) { if ($("#kmpEski").checked) db.kampanyalar.forEach(k=>k.aktif=false); db.kampanyalar.push(...ks); }
+      save(); sheetKapat(); toast(`${ks.filter(k=>k.aktif).length} kampanya aktif`); render();
+    };
+  };
+  ciz();
+}
+/* Eşleştirme */
+const xlMi = p => /\bXX?L\b/.test(db.katalog[normModel(p?.model)]?.grup || "");
+function grupUyar(g, u){ const p = P(u.pid); if (!p) return false;
+  if (g.modeller.length) return g.modeller.some(m=>normModel(m)===normModel(p.model));
+  if (trk(p.marka||"Profilo")!=="profilo") return false; // Profilo kampanyası: kategoriyle eşleşmede yalnız Profilo ürünleri
+  return g.kat.includes(p.kategori); }
+function kampanyaUyar(k, us){
+  if (k.haricXL && us.some(u=>xlMi(P(u.pid)))) return false;
+  const kalan = [...us];
+  for (const g of [...k.gruplar].sort((a,b)=>b.modeller.length-a.modeller.length)){
+    let al = 0; for (let i=kalan.length-1; i>=0 && al<(g.enFazla||g.adet); i--) if (grupUyar(g,kalan[i])) { kalan.splice(i,1); al++; }
+    if (al < g.adet) return false;
+  }
+  return kalan.length===0;
+}
+const urunKampanyalari = u => aktifKampanyalar().filter(k=>!(k.haricXL && xlMi(P(u.pid))) && k.gruplar.some(g=>grupUyar(g,u)));
+function kampanyaKutu(u){
+  const l = urunKampanyalari(u); if (!l.length) return "";
+  return `<div class="card" style="background:var(--okbg)"><h3>Bu ürün kampanyaya girer</h3>${l.map(k=>`<div class="row sp" style="margin-top:6px"><div><b>${esc(k.ad)}</b><div class="muted">${k.gruplar.map(g=>esc(g.ad)+(g.adet>1?" ×"+g.adet:"")).join(" + ")} · bayi primi +${TL(k.prim)}</div></div><button class="mini" data-kmp="${k.id}" data-u="${u.id}" style="flex:0 0 auto">Kampanyalı sat</button></div>`).join("")}</div>`;
+}
+/* Uygulamada kampanyalı satış: birden çok cihaz birlikte satılır, bayi primi eşit bölünür */
+function kampanyaSatis(kid, ilkId){
+  const k = db.kampanyalar.find(x=>x.id===kid), s = db.settings, sec = [db.units.find(x=>x.id===ilkId)], fiyat = {};
+  const oner = u => fiyatIcin(maliyet(u), s.marj, s.kom[durum.odeme]||0);
+  fiyat[ilkId] = oner(sec[0]);
+  let q = "";
+  const ciz = () => {
+    const ok = kampanyaUyar(k, sec), prim = r2(k.prim/sec.length);
+    const aday = q.length>=2 ? db.products.filter(p=>stoktaki(p.id).some(u=>!sec.includes(u) && k.gruplar.some(g=>grupUyar(g,u))) && ara(q).includes(p)).slice(0,10) : [];
+    sheet(`<div class="row sp"><h2 style="margin:0">${esc(k.ad)}</h2><button class="mini" id="kapat" style="flex:0 0 auto">Vazgeç</button></div>
+      <div class="muted">Gerekli: ${k.gruplar.map(g=>esc(g.ad)+" ×"+g.adet).join(" + ")} · bayi primi ${TL(k.prim)}</div>
+      ${sec.map((u,i)=>{ const p=P(u.pid); return `<div class="satir"><div class="row sp"><b>${esc(pAd(p))}</b>${i?`<button class="mini" data-cik="${i}" style="flex:0 0 auto">Çıkar</button>`:""}</div>
+        <div class="muted">Maliyet ${TL(maliyet(u))}${u.seri?" · seri "+esc(u.seri):""}</div>
+        <label>Satış fiyatı (KDV dahil)</label><input data-fy="${u.id}" inputmode="decimal" value="${virgul(fiyat[u.id])}"></div>`; }).join("")}
+      <label>Kampanyaya ürün ekle</label><input id="kmpAra" type="search" placeholder="Model ara…" value="${esc(q)}">
+      ${aday.map(p=>`<div class="it tap" data-ekle="${p.id}" style="padding:8px 0;border-bottom:1px solid var(--line)">${esc(pAd(p))} <span class="muted">· ${stoktaki(p.id).length} stokta</span></div>`).join("")}
+      <div class="row"><div><label>Ödeme</label><select id="kOd">${odemeOps(durum.odeme)}</select></div><div style="flex:0 0 100px"><label>Komisyon %</label><input id="kKom" inputmode="decimal" value="${s.kom[durum.odeme]||0}"></div></div>
+      <div class="row"><div><label>Tarih</label><input id="kTar" type="date" value="${today()}"></div><div><label>Müşteri</label><input id="kMus"></div></div>
+      <div id="kOzet"></div>
+      <button class="b" id="kKay" ${ok?"":"disabled style=\"opacity:.5\""}>${ok?"Kampanyalı satışı kaydet":"Kampanya şartı henüz tamamlanmadı"}</button>`);
+    const ozet = () => { const kom=num($("#kKom").value); let top=0, kar=0;
+      sec.forEach(u=>{ const f=farkBilgi(P(u.pid).model, $("#kTar").value||today()); const h=satisHesap(u,{ tutar:fiyat[u.id], komOran:kom, kampPrim: ok?prim:0, fark: f&&f.icinde?f.tutar:0 }); top+=h.tutar; kar+=h.kar; });
+      $("#kOzet").innerHTML = `<div class="res ${kar<0?"neg":""}"><div class="row sp"><span>Toplam satış</span><b>${TL(top)}</b></div><div class="row sp"><span>Bayi primi</span><b>${ok?"+"+TL(k.prim):"—"}</b></div><div class="row sp"><span class="big">Toplam kâr</span><span class="big ${kar<0?"neg":"pos"}">${TL(kar)}</span></div></div>`; };
+    document.querySelectorAll("[data-fy]").forEach(i=>i.oninput=()=>{ fiyat[i.dataset.fy]=num(i.value); ozet(); });
+    document.querySelectorAll("[data-cik]").forEach(b=>b.onclick=()=>{ sec.splice(+b.dataset.cik,1); ciz(); });
+    document.querySelectorAll("[data-ekle]").forEach(d=>d.onclick=()=>{ const u = stoktaki(d.dataset.ekle).find(x=>!sec.includes(x)); sec.push(u); fiyat[u.id]=oner(u); q=""; ciz(); });
+    $("#kmpAra").oninput=e=>{ q=e.target.value; const pos=e.target.selectionStart; ciz(); const a=$("#kmpAra"); a.focus(); a.setSelectionRange(pos,pos); };
+    $("#kOd").onchange=e=>{ $("#kKom").value=s.kom[e.target.value]||0; ozet(); }; $("#kKom").oninput=ozet; ozet();
+    $("#kapat").onclick=sheetKapat;
+    $("#kKay").onclick=()=>{ if (!kampanyaUyar(k,sec)) return; if (sec.some(u=>!num(fiyat[u.id]) && !k.gruplar.some(g=>/hediye/i.test(g.ad)&&grupUyar(g,u)))) return alert("Her ürünün satış fiyatını yazın (hediye ürün 0 olabilir).");
+      const kom=num($("#kKom").value), od=$("#kOd").value;
+      sec.forEach(u=>{ const h=satisHesap(u,{ tutar:fiyat[u.id], komOran:kom });
+        const tr = $("#kTar").value||today(), f = farkBilgi(P(u.pid).model, tr);
+        u.satis = { tarih:tr, tutar:h.tutar, odeme:od, komOran:kom, kom:h.kom, gider:0, musteri:$("#kMus").value.trim(), not:"Kampanya: "+k.ad, kampanya:{ id:k.id, ad:k.ad, prim }, fark: f && f.icinde ? f.tutar : 0 }; });
+      durum.odeme=od; durum.pid=null; save(); sheetKapat(); toast(`${sec.length} ürün kampanyayla satıldı · prim ${TL(k.prim)}`); render(); };
+  };
+  ciz();
+}
+
+/* ---------- Banka komisyon oranları (BSH aylık Excel'i) ---------- */
+const ELLE = "elle";
+const bankaSecenekleri = () => [{ id:ELLE, ad:"Elle girilen oranlar", tur:"kart", oran:db.settings.taksit }, ...((db.bankalar && db.bankalar.secenekler) || [])];
+const bankaBul = id => bankaSecenekleri().find(b=>b.id===id) || bankaSecenekleri()[0];
+const varsayilanBanka = () => bankaBul(db.settings.banka);
+const bankaOps = sec => { const l = bankaSecenekleri(), g = (t,ad) => { const x = l.filter(b=>b.tur===t); return x.length ? `<optgroup label="${ad}">${x.map(b=>`<option value="${esc(b.id)}"${b.id===sec?" selected":""}>${esc(b.ad)}</option>`).join("")}</optgroup>` : ""; };
+  return g("kart","Kredi kartı taksit") + g("kredi","Alışveriş kredisi (bayi komisyonlu)"); };
+const taksitSayilari = B => Object.keys(B.oran).map(Number).filter(n=>n>1 && B.oran[n]!=null && B.oran[n]!=="").sort((a,b)=>a-b);
+function bankaDosyaCoz(wb){
+  const sec = [], slug = s => s.toLocaleLowerCase("tr").replace(/[^a-z0-9çğıöşü]+/g,"-").replace(/^-|-$/g,"");
+  wb.SheetNames.forEach((sayfa, si)=>{
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sayfa],{header:1,raw:true,defval:""}), parca = [];
+    /* bölüm adı: "BLOKELİ / ERTESİ GÜN / Taksitli işlemler" sütun başlıklarının olduğu satırın ilk hücresi */
+    const baslikBul = i => { for (let j=i-1; j>=0 && j>=i-6; j--){ const r = rows[j], t = String(r.find(c=>String(c).trim())||"").trim();
+      if (r.some(c=>/^(blokeli|ertesi gün|taksitli işlemler?)$/.test(trk(c).trim())) || /kredi maliyet tablosu|bloke gün çalışan/.test(trk(t))) return t.replace(/\s+/g," "); } return ""; };
+    rows.forEach((r,i)=>{
+      /* yatay: başlık satırında "2 taksit, 3 taksit…", altında TOPLAM satırı */
+      const kol = {}; r.forEach((c,j)=>{ const m = String(c).trim().match(/^(\d{1,2})\s*taksit$/i); if (m) kol[j] = +m[1]; });
+      if (Object.keys(kol).length>=2) {
+        const t = rows.slice(i+1, i+8).find(x=>/^(toplam|toplam kesinti)/i.test(String(x.find(c=>String(c).trim())||"").trim())); if (!t) return;
+        const oran = {}; for (const j in kol) if (typeof t[j]==="number") oran[kol[j]] = t[j];
+        if (Object.keys(oran).length) parca.push({ tur:"kart", baslik: baslikBul(i), oran, ertesi: /ERTESİ GÜN/i.test(rows.slice(Math.max(0,i-3),i).flat().join(" ")) });
+      }
+      /* dikey: "2 Taksit" satırları, "TOPLAM" sütunu */
+      if (/^taksit sayısı$/.test(trk(r[0]).trim())) { const tj = r.findIndex(c=>/toplam/i.test(String(c))); if (tj<0) return; const oran = {};
+        rows.slice(i+1).forEach(x=>{ const m = String(x[0]).trim().match(/^(\d{1,2})\s*taksit$/i); if (m && typeof x[tj]==="number") oran[+m[1]] = x[tj]; });
+        if (Object.keys(oran).length) parca.push({ tur:"kart", baslik: baslikBul(i) || "Blokeli", oran, ertesi:false }); }
+      /* alışveriş kredisi: "Vade (Ay)" + "Bayi Komisyon / Katkı Payı Oranı" */
+      const iV = r.findIndex(c=>/^vade/i.test(String(c).trim())), iO = r.findIndex(c=>/bayi (komisyon|katkı payı) oranı/i.test(String(c)));
+      if (iV>=0 && iO>=0) { const oran = {};
+        for (const x of rows.slice(i+1)) { if (typeof x[iV]!=="number") break; if (typeof x[iO]==="number" && x[iO]>0 && x[iO]<1) oran[x[iV]] = x[iO]; }
+        if (Object.keys(oran).length) parca.push({ tur:"kredi", baslik: baslikBul(i), oran, yuzde:false }); }
+    });
+    const yuzde = parca.some(p=>p.tur==="kart" && Object.values(p.oran).some(v=>v>1)); // sayfa yüzde mi kesir mi
+    parca.forEach(p=>{
+      const kesir = p.tur==="kredi" || !yuzde, oran = {}; for (const n in p.oran) oran[n] = r2(p.oran[n] * (kesir ? 100 : 1));
+      let ad = (si===0 ? p.baslik : sayfa + (p.baslik ? " · " + p.baslik.replace(/^BSH BAYİLER\s*/i,"") : "")).replace(/\(\*?\s*/,"· ").replace(/\s*için geçerlidir\)?/i,"").replace(/\s+/g," ").trim();
+      if (p.tur==="kart" && p.ertesi) ad += " (ertesi gün)";
+      sec.push({ id: slug(ad), ad, tur:p.tur, oran });
+    });
+  });
+  const tekil = {}; return sec.filter(b=>tekil[b.id] ? false : (tekil[b.id]=1));
+}
+async function bankaDosyaOku(f){
+  if (!window.XLSX) return alert("Excel modülü yüklenemedi. İnternete bağlıyken tekrar deneyin.");
+  let sec; try { sec = bankaDosyaCoz(XLSX.read(await f.arrayBuffer(),{type:"array"})); } catch(e){ return alert("Dosya okunamadı: "+e.message); }
+  if (!sec.length) return alert("Bu dosyada taksit oranı tablosu bulunamadı.");
+  const m = f.name.match(new RegExp("("+AYLAR.join("|")+")\\s*(\\d{4})","i")), ad = m ? m[1]+" "+m[2] : AYLAR[new Date().getMonth()]+" "+new Date().getFullYear();
+  sheet(`<div class="row sp"><h2 style="margin:0">Banka oranlarını yükle</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(f.name)}</div><label>Dönem</label><input id="bAd" value="${esc(ad)}">
+    <div class="res"><b>${sec.filter(b=>b.tur==="kart").length} kart seçeneği, ${sec.filter(b=>b.tur==="kredi").length} kredi seçeneği</b> okundu. Oranlar toplam kesinti (komisyon + puan) yüzdesidir.</div>
+    <div class="card"><table><tr><th>Seçenek</th><th style="text-align:right">3</th><th style="text-align:right">6</th><th style="text-align:right">9</th><th style="text-align:right">12</th></tr>${sec.map(b=>`<tr><td>${esc(b.ad)}</td>${[3,6,9,12].map(n=>`<td style="text-align:right">${b.oran[n]!=null?"%"+virgul(b.oran[n]):"—"}</td>`).join("")}</tr>`).join("")}</table></div>
+    <button class="b" id="bKay">Kaydet</button>`);
+  $("#kapat").onclick=sheetKapat;
+  $("#bKay").onclick=()=>{ db.bankalar = { ad:$("#bAd").value.trim()||ad, yuklendi:today(), secenekler:sec }; save(); sheetKapat(); toast(`${sec.length} banka seçeneği yüklendi`); vDiger(); };
+}
+
+/* ---------- Profilo fiyat farkları (satışta kâra eklenir) ---------- */
+function fiyatFarkiCoz(wb){
+  const k = {}, aile = {}; let bas = "", bit = "", sutun = "";
+  wb.SheetNames.forEach(ad=>{
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[ad],{header:1,raw:true,defval:""}), hi = rows.findIndex(r=>r.some(c=>/fiyat fark/i.test(String(c)))); if (hi<0) return;
+    const h = rows[hi].map(c=>String(c)), fc = h.map((x,i)=>/fiyat fark/i.test(x)?i:-1).filter(i=>i>=0), ci = fc[fc.length-1], c = /hariç/.test(trk(h[ci])) ? 1.2 : 1;
+    const iU = h.findIndex(x=>/uygulama/i.test(x)), iE = h.findIndex(x=>/ek şart/i.test(x)), iB = h.findIndex(x=>/başlangıç/i.test(x)), iS = h.findIndex(x=>/son .*tarih/i.test(x)), aileMi = /aile/i.test(ad);
+    rows.slice(hi+1).forEach(r=>{ const m = normModel(r[0]); if (!MODEL_KOD.test(m) || typeof r[ci]!=="number") return;
+      if (aileMi) aile[m] = r2(r[ci]*c);
+      else { k[m] = { tutar:r2(r[ci]*c), sart:String(r[iU]??"").trim(), ek:String(r[iE]??"").trim() }; if (!bas && iB>=0) bas = tarihOku(r[iB]); if (!bit && iS>=0) bit = tarihOku(r[iS]); } });
+    if (!aileMi) sutun = h[ci];
+  });
+  return { k, aile, bas, bit, sutun };
+}
+async function fiyatFarkiOku(f){
+  if (!window.XLSX) return alert("Excel modülü yüklenemedi. İnternete bağlıyken tekrar deneyin.");
+  let r; try { r = fiyatFarkiCoz(XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true})); } catch(e){ return alert("Dosya okunamadı: "+e.message); }
+  if (!Object.keys(r.k).length && !Object.keys(r.aile).length) return alert("Bu dosyada fiyat farkı tablosu bulunamadı.");
+  const ay = (r.sutun.match(new RegExp(AYLAR.join("|"),"i"))||[""])[0], stok = db.units.filter(u=>!u.satis && r.k[normModel(P(u.pid)?.model)]);
+  sheet(`<div class="row sp"><h2 style="margin:0">Fiyat farklarını yükle</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(f.name)} · kullanılan sütun: ${esc(r.sutun)}</div>
+    <label>Dönem adı</label><input id="ffAd" value="${esc((ay+" "+(r.bas||today()).slice(0,4)).trim())}">
+    <div class="row"><div><label>Başlangıç</label><input id="ffBas" type="date" value="${r.bas}"></div><div><label>Son satış tarihi</label><input id="ffBit" type="date" value="${r.bit}"></div></div>
+    <div class="res"><b>${Object.keys(r.k).length} modelde fiyat farkı</b> (“BİTTİ” yazanlar alınmadı), ${Object.keys(r.aile).length} modelde Aile Bakanlığı farkı.<br>
+      <span class="muted">Tutarlar KDV dahile çevrildi (×1,2). Stoktaki ${stok.length} cihaz için toplam ${TL(stok.reduce((a,u)=>a+r.k[normModel(P(u.pid).model)].tutar,0))}.</span></div>
+    <div class="muted">Şart: ${esc([...new Set(Object.values(r.k).map(x=>x.sart).filter(Boolean))].join(" / ")||"—")}${Object.values(r.k).some(x=>x.ek)?` · bazı modellerde: ${esc([...new Set(Object.values(r.k).map(x=>x.ek).filter(Boolean))].join(" / "))}`:""}</div>
+    <button class="b" id="ffKay">Kaydet</button>`);
+  $("#kapat").onclick=sheetKapat;
+  $("#ffKay").onclick=()=>{ db.fiyatFarki = { ad:$("#ffAd").value.trim(), bas:$("#ffBas").value, bit:$("#ffBit").value, k:r.k, aile:r.aile, yuklendi:today() }; save(); sheetKapat(); toast("Fiyat farkları yüklendi"); vDiger(); };
+}
+const farkBilgi = (model, tarih=today()) => { const f = db.fiyatFarki, x = f && f.k[normModel(model)]; if (!x) return null; return { ...x, icinde: (!f.bas || tarih>=f.bas) && (!f.bit || tarih<=f.bit), donem:f.ad, bit:f.bit }; };
+const aileFark = model => (db.fiyatFarki && db.fiyatFarki.aile[normModel(model)]) || 0;
+const farkKutu = (p, u, kom) => { const f = farkBilgi(p.model); if (!f) return "";
+  return `<div class="res" style="background:var(--okbg)"><div class="row sp"><span>Profilo fiyat farkı · ${esc(f.donem)}</span><b class="pos">+${TL(f.tutar)}</b></div>
+    <div class="muted">${f.icinde?`${trDate(f.bit)} tarihine kadar satışta kâra eklenir.`:"Dönem dışında — eklenmez."}${f.ek?" "+esc(f.ek)+".":""}</div>
+    ${f.icinde?`<div class="row sp"><span class="muted">Fiyat farkıyla zarar sınırı</span><b>${TL(fiyatIcin(maliyet(u)-f.tutar,0,kom))}</b></div>`:""}
+    ${aileFark(p.model)?`<div class="muted">Aile Bakanlığı satışında ayrıca +${TL(aileFark(p.model))}</div>`:""}</div>`; };
+
+/* ---------- Satış formu ---------- */
+function satisFormu(uidSec, fiyat){
+  const u = db.units.find(x=>x.id===uidSec), p = P(u.pid), s = db.settings;
+  let bid = varsayilanBanka().id;
+  sheet(`<h2>Satış · ${esc(pAd(p))}</h2><div class="muted">Seri: ${esc(u.seri||"—")}</div>${maliyetKutu(u)}
+    <label>Satış fiyatı (KDV dahil)</label><input id="sTutar" inputmode="decimal" value="${virgul(fiyat)}">
+    <div class="row"><div><label>Ödeme</label><select id="sOd">${odemeOps(durum.odeme)}</select></div><div style="flex:0 0 100px"><label>Komisyon %</label><input id="sKom" inputmode="decimal" value="${s.kom[durum.odeme]||0}"></div></div>
+    <div id="sTk" class="hide"><div class="row"><div><label>Banka / kredi</label><select id="sBanka">${bankaOps(bid)}</select></div><div style="flex:0 0 110px"><label>Taksit</label><select id="sN"></select></div></div></div>
+    <label>Ek gider (montaj, nakliye, takas indirimi) — ₺</label><input id="sGider" inputmode="decimal" placeholder="0">
+    <div class="row"><div><label>Tarih</label><input id="sTarih" type="date" value="${today()}"></div><div><label>Müşteri (isteğe bağlı)</label><input id="sMus"></div></div>
+    <div id="sFark"></div>
+    <label>Not</label><input id="sNot">
+    <div id="sOzet"></div>
+    <button class="b" id="sKaydet">Satışı kaydet</button><button class="b2" id="kapat" style="width:100%;margin-top:8px">Vazgeç</button>`);
+  const farkCiz = () => { const f = farkBilgi(p.model, $("#sTarih").value||today()), a = aileFark(p.model);
+    $("#sFark").innerHTML = (f ? `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="sFf" ${f.icinde?"checked":""} style="width:auto"> Profilo fiyat farkı +${TL(f.tutar)}</label><div class="muted">${f.icinde?"":"Satış tarihi dönem dışında. "}${esc(f.sart)}${f.ek?" · "+esc(f.ek):""}</div>` : "")
+      + (a ? `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="sAile" style="width:auto"> Aile Bakanlığı satışı +${TL(a)}</label>` : "");
+    ["#sFf","#sAile"].forEach(i=>{ if ($(i)) $(i).onchange=ozet; }); };
+  const tkCiz = () => { const B = bankaBul(bid), ns = taksitSayilari(B), sec = $("#sN").value;
+    $("#sN").innerHTML = ns.map(n=>`<option value="${n}"${String(n)===sec?" selected":""}>${n} ${B.tur==="kredi"?"ay":"taksit"}</option>`).join("");
+    const n = $("#sN").value; if (n) $("#sKom").value = virgul(B.oran[n]); };
+  const oku = () => ({ tutar:$("#sTutar").value, odeme:$("#sOd").value, komOran:num($("#sKom").value), gider:$("#sGider").value, tarih:$("#sTarih").value||today(), musteri:$("#sMus").value.trim(), not:$("#sNot").value.trim(),
+    fark: $("#sFf") && $("#sFf").checked ? farkBilgi(p.model).tutar : 0, aile: $("#sAile") && $("#sAile").checked ? aileFark(p.model) : 0 });
+  const ozet = () => { const h = satisHesap(u, oku());
+    $("#sOzet").innerHTML = `<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Satış</span><b>${TL(h.tutar)}</b></div><div class="row sp"><span>Maliyet</span><b>−${TL(h.maliyet)}</b></div><div class="row sp"><span>Komisyon</span><b>−${TL(h.kom)}</b></div><div class="row sp"><span>Ek gider</span><b>−${TL(h.gider)}</b></div>
+      ${h.fark?`<div class="row sp"><span>Profilo fiyat farkı</span><b>+${TL(h.fark)}</b></div>`:""}${h.aile?`<div class="row sp"><span>Aile Bakanlığı farkı</span><b>+${TL(h.aile)}</b></div>`:""}
+      <div class="row sp" style="margin-top:4px"><span class="big">Kâr</span><span class="big ${h.kar<0?"neg":"pos"}">${TL(h.kar)}</span></div>
+      <div class="row sp"><span>Prim düşünce kâr</span><b class="${h.karPrimli<0?"neg":"pos"}">${TL(h.karPrimli)}</b></div>
+      <div class="muted">Maliyete göre %${h.oran.toFixed(1)} · yıl sonu primi ${TL(h.prim)}</div></div>`; };
+  $("#sOd").onchange=e=>{ const t = e.target.value==="taksit"; $("#sTk").classList.toggle("hide",!t); if (t) tkCiz(); else $("#sKom").value = s.kom[e.target.value]||0; ozet(); };
+  $("#sBanka").onchange=e=>{ bid=e.target.value; tkCiz(); ozet(); }; $("#sN").onchange=()=>{ tkCiz(); ozet(); };
+  $("#sTarih").onchange=()=>{ farkCiz(); ozet(); };
+  ["#sTutar","#sKom","#sGider"].forEach(i=>$(i).oninput=ozet);
+  if (durum.odeme==="taksit") { $("#sTk").classList.remove("hide"); tkCiz(); }
+  farkCiz(); ozet();
+  $("#kapat").onclick=sheetKapat;
+  $("#sKaydet").onclick=()=>{
+    const o = oku(); if (!num(o.tutar)) return alert("Satış fiyatını yazın.");
+    const h = satisHesap(u,o), tk = o.odeme==="taksit" ? { banka:bankaBul(bid).ad, n:+$("#sN").value } : null;
+    u.satis = { tarih:o.tarih, tutar:h.tutar, odeme:o.odeme, komOran:o.komOran, kom:h.kom, gider:h.gider, musteri:o.musteri, not:o.not, fark:h.fark, aile:h.aile, ...(tk?{ taksit:tk }:{}) };
+    durum.odeme = o.odeme; save(); sheetKapat(); durum.pid = stoktaki(p.id).length ? p.id : null; toast("Satış kaydedildi · kâr "+TL(h.kar)); render();
   };
 }
 
