@@ -83,7 +83,8 @@ html,body{overflow-x:hidden}
 .cips::-webkit-scrollbar{display:none}
 .cip{flex:0 0 auto;border:1px solid var(--line);border-radius:20px;padding:7px 12px;background:var(--card);color:var(--ink);font-size:14px;white-space:nowrap}
 .cip small{color:var(--muted);margin-left:4px}
-.cip.on{background:var(--brand);border-color:var(--brand);color:#fff}.cip.on small{color:inherit;opacity:.8}
+.cip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+#mcips{margin-top:6px}#mcips .cip{font-size:13px;padding:5px 11px;background:var(--brand2);border-color:transparent}#mcips .cip.on{background:var(--brand)}.cip.on small{color:inherit;opacity:.8}
 .yuk{display:flex;align-items:center;gap:10px;padding:14px;background:var(--brand2);border-radius:10px;margin-top:10px}
 </style>
 </head>
@@ -207,25 +208,32 @@ const odemeOps = sec => Object.entries(ODEME).map(([k,v])=>`<option value="${k}"
 function vFiyat(){
   const s = db.settings;
   if (durum.marj==null) durum.marj = s.marj;
-  main.innerHTML = `${aramaKutusu("Model, marka, seri no ara…")}<div class="cips" id="cips"></div><div id="sonuc"></div>`;
+  main.innerHTML = `${aramaKutusu("Model, marka, seri no ara…")}<div class="cips" id="cips"></div><div class="cips" id="mcips"></div><div id="sonuc"></div>`;
   /* Kategori kısayolları: yalnız stokta olan kategoriler, stok adediyle */
   const cipCiz = () => { const say = {}; db.units.forEach(u=>{ if (!u.satis) { const k = P(u.pid)?.kategori || "Diğer"; say[k] = (say[k]||0)+1; } });
     const sira = [...KATEGORI, ...Object.keys(say).filter(k=>!KATEGORI.includes(k))].filter(k=>say[k]);
     $("#cips").innerHTML = sira.length > 1 ? `<button class="cip ${durum.kat?"":"on"}" data-cat="">Tümü</button>` + sira.map(k=>`<button class="cip ${durum.kat===k?"on":""}" data-cat="${esc(k)}">${esc(KISA[k]||k)}<small>${say[k]}</small></button>`).join("") : "";
-    $("#cips").querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{ durum.kat = b.dataset.cat===durum.kat ? "" : b.dataset.cat; durum.pid = null; cipCiz(); sonuc(); });
-    const on = $("#cips .cip.on"); if (on) $("#cips").scrollLeft = on.offsetLeft - $("#cips").clientWidth/2 + on.offsetWidth/2; };
+    $("#cips").querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{ durum.kat = b.dataset.cat===durum.kat ? "" : b.dataset.cat; durum.marka = ""; durum.pid = null; cipCiz(); sonuc(); });
+    const on = $("#cips .cip.on"); if (on) $("#cips").scrollLeft = on.offsetLeft - $("#cips").clientWidth/2 + on.offsetWidth/2;
+    /* Kategori seçiliyse altında o kategorideki markalar */
+    const ms = {}; if (durum.kat) db.units.forEach(u=>{ const p = P(u.pid); if (!u.satis && p && p.kategori===durum.kat) { const m = p.marka || "Markasız"; ms[m] = (ms[m]||0)+1; } });
+    const ml = Object.keys(ms).sort((a,b)=>ms[b]-ms[a]);
+    if (durum.marka && !ms[durum.marka]) durum.marka = "";
+    $("#mcips").innerHTML = ml.length > 1 ? `<button class="cip ${durum.marka?"":"on"}" data-mk="">Tüm markalar</button>` + ml.map(m=>`<button class="cip ${durum.marka===m?"on":""}" data-mk="${esc(m)}">${esc(m)}<small>${ms[m]}</small></button>`).join("") : "";
+    $("#mcips").style.display = ml.length > 1 ? "" : "none";
+    $("#mcips").querySelectorAll("[data-mk]").forEach(b=>b.onclick=()=>{ durum.marka = b.dataset.mk===durum.marka ? "" : b.dataset.mk; durum.pid = null; cipCiz(); sonuc(); }); };
   cipCiz(); aramaBagla(sonuc); sonuc();
   function sonuc(){
     const el = $("#sonuc");
     if (durum.pid && P(durum.pid)) return detay(P(durum.pid));
-    const l = ara(durum.q, true).filter(p=>!durum.kat || p.kategori===durum.kat);
+    const l = ara(durum.q, true).filter(p=>(!durum.kat || p.kategori===durum.kat) && (!durum.marka || (p.marka||"Markasız")===durum.marka));
     if (!db.products.length) { el.innerHTML = `<div class="empty">Henüz ürün yok.<br>“Giriş”ten faturayı okutun ya da Diğer → Listeden yükle.</div>`; return; }
     el.innerHTML = l.length ? `<div class="card list">${l.slice(0,60).map(p=>{
       const st = stoktaki(p.id), ms = st.map(maliyet), mn = Math.min(...ms), mx = Math.max(...ms);
       return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}</div></div><div class="sag"><span class="pill">${st.length} adet</span>${degisimRozet(p.model)}<div class="muted">maliyet ${TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
-    }).join("")}</div>` : `<div class="empty">Stokta eşleşen ürün yok${durum.kat?` (${esc(durum.kat)})`:""}.</div>`;
+    }).join("")}</div>` : `<div class="empty">Stokta eşleşen ürün yok${durum.kat?` (${esc([durum.kat, durum.marka].filter(Boolean).join(" · "))})`:""}.</div>`;
     const q = (durum.q||"").toLocaleLowerCase("tr").trim(), gor = new Set(l.map(p=>normModel(p.model)));
-    const kat = q.length>=2 && guncelListe() ? Object.entries(guncelListe().k).filter(([m])=>!gor.has(m) && (!durum.kat || db.katalog[m]?.kategori===durum.kat) && (m.toLocaleLowerCase("tr").includes(q.replace(/\s+/g,"")) || (db.katalog[m]?.ad||"").toLocaleLowerCase("tr").includes(q))).slice(0,20) : [];
+    const kat = q.length>=2 && guncelListe() ? Object.entries(guncelListe().k).filter(([m])=>!gor.has(m) && (!durum.kat || db.katalog[m]?.kategori===durum.kat) && (!durum.marka || trk(durum.marka)==="profilo") && (m.toLocaleLowerCase("tr").includes(q.replace(/\s+/g,"")) || (db.katalog[m]?.ad||"").toLocaleLowerCase("tr").includes(q))).slice(0,20) : [];
     if (kat.length) el.innerHTML += `<h2>Profilo fiyat listesinde</h2><div class="card list">${kat.map(([m,f])=>`<div class="it tap" data-m="${esc(m)}"><div class="row sp"><div><h3>${esc(db.katalog[m]?.model||m)}</h3><div class="muted">${esc((db.katalog[m]?.ad||"").slice(0,70))}</div></div><div class="sag"><b>${TL(f.n)}</b><div class="muted">nakit</div></div></div></div>`).join("")}</div>`;
     el.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>{ durum.pid=d.dataset.p; sonuc(); });
     el.querySelectorAll("[data-m]").forEach(d=>d.onclick=()=>katalogDetay(d.dataset.m));
