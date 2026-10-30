@@ -1,5 +1,5 @@
 // Uygulama dosyalarını telefonda saklar; internet yokken de açılır. Veriler localStorage'da, burada değil.
-const C = "bayi-defteri-v16";
+const C = "bayi-defteri-v17";
 const DOSYALAR = ["./", "index.html", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png",
   "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"];
 self.addEventListener("install", e => e.waitUntil(caches.open(C).then(c => c.addAll(DOSYALAR)).then(() => self.skipWaiting())));

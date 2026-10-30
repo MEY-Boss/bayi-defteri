@@ -151,7 +151,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v16 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v17 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
@@ -489,6 +489,8 @@ function vGiris(){
     const cift = seri.filter(sr=>db.units.some(u=>u.seri===sr));
     if (cift.length && !confirm("Bu seri no zaten kayıtlı: "+cift.join(", ")+"\nYine de eklensin mi?")) return;
     const n = seri.length || Math.max(1, parseInt($("#gAdet").value)||1);
+    const gf = faturaGirisleri($("#gFat").value);
+    if (gf && !confirm(`${$("#gFat").value} numaralı faturadan ${trDate(gf.tarih)} tarihinde ${gf.adet} cihaz zaten girilmiş.\nAynı faturanın başka bir kalemi değilse çift giriş olur. Devam edilsin mi?`)) return;
     const ortak = { gTarih:$("#gTar").value, alis, ekMaliyet:num($("#gEk").value), fatura:$("#gFat").value.trim(), tedarikci:$("#gTed").value.trim() };
     cihazEkle(p, n, seri, ortak);
     durum.sonTed = ortak.tedarikci; durum.girisPid = null; durum.girisAlis = null; save();
@@ -545,11 +547,18 @@ async function faturaOku(f){
     sheet(`<h2>Fatura okunamadı</h2><div class="res neg">${esc(m)}</div><div class="muted" style="margin-top:8px">İnternet bağlantısını kontrol edin ya da elle giriş yapın.</div><button class="b" id="kapat">Tamam</button>`); $("#kapat").onclick=sheetKapat; return; }
   faturaOnay(r);
 }
+/* Aynı fatura daha önce stoğa alınmış mı (fatura no, büyük/küçük harf ve boşluk farkı yok sayılır) */
+const faturaNoNorm = n => String(n||"").toLocaleUpperCase("tr").replace(/\s+/g,"");
+function faturaGirisleri(no){ const n = faturaNoNorm(no); if (!n) return null;
+  const us = db.units.filter(u=>faturaNoNorm(u.fatura)===n); if (!us.length) return null;
+  return { adet:us.length, tarih:us.map(u=>u.gTarih).sort()[0], satildi:us.filter(u=>u.satis).length, tedarikci:us[0].tedarikci||"" }; }
+const faturaUyari = no => { const g = faturaGirisleri(no); return g ? `<div class="res neg"><b>⚠️ Bu fatura daha önce stoğa alınmış.</b><div>${esc(no)} · ${trDate(g.tarih)} · ${g.adet} cihaz${g.satildi?` (${g.satildi} tanesi satıldı)`:""}${g.tedarikci?" · "+esc(g.tedarikci):""}</div><div class="muted">Tekrar kaydederseniz stok iki kez sayılır.</div></div>` : ""; };
 function faturaOnay(r){
   const k = r.kalemler.map(x=>({ ...x, al:true }));
   const ciz = () => {
     sheet(`<div class="row sp"><h2 style="margin:0">Faturayı kontrol edin</h2><button class="mini" id="kapat" style="flex:0 0 auto">Vazgeç</button></div>
       <div class="row"><div><label>Fatura no</label><input id="ftNo" value="${esc(r.fatura_no)}"></div><div><label>Tarih</label><input id="ftTar" type="date" value="${/^\d{4}-\d{2}-\d{2}$/.test(r.tarih)?r.tarih:today()}"></div></div>
+      <div id="ftCift">${faturaUyari(r.fatura_no)}</div>
       <label>Tedarikçi</label><input id="ftTed" value="${esc(r.tedarikci)}">
       ${r.not?`<div class="res" style="background:var(--warnbg)"><b>Not:</b> ${esc(r.not)}</div>`:""}
       ${r.yerel?`<div class="muted">e-Fatura PDF’inden okundu. Model kodlarını kontrol edin; Diva’da ve stokta aynı yazılmalı.</div>`:""}
@@ -573,7 +582,10 @@ function faturaOnay(r){
         topla(); }); });
     topla();
     $("#kapat").onclick=()=>{ if(confirm("Okunan fatura kaydedilmeden kapatılsın mı?")) sheetKapat(); };
+    $("#ftNo").oninput=()=>{ r.fatura_no=$("#ftNo").value; $("#ftCift").innerHTML=faturaUyari($("#ftNo").value); };
     $("#ftKay").onclick=()=>{
+      const g = faturaGirisleri($("#ftNo").value);
+      if (g && !confirm(`${$("#ftNo").value} numaralı fatura ${trDate(g.tarih)} tarihinde zaten stoğa alınmış (${g.adet} cihaz).\nYine de tekrar eklensin mi?`)) return;
       const s = k.filter(x=>x.al);
       if (s.some(x=>!x.model.trim()||!num(x.birim_fiyat_kdv_dahil)||!(x.adet>0))) return alert("Stoğa alınacak her satırda model, adet ve birim fiyat dolu olmalı.");
       const ortak = { gTarih:$("#ftTar").value, fatura:$("#ftNo").value.trim(), tedarikci:$("#ftTed").value.trim() };
