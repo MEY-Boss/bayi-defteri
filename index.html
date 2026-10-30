@@ -111,6 +111,14 @@ tr:last-child td{border-bottom:0}
 .satir{background:var(--card);border-radius:14px;padding:12px;margin-top:10px;box-shadow:var(--sh)}
 .satir.kapali{opacity:.45}
 
+/* Açılır-kapanır bölümler (Ayarlar) */
+details.acc{padding:0}
+details.acc>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:15px 16px;font-weight:650;font-size:16px;cursor:pointer;letter-spacing:-.01em}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:"";flex:0 0 auto;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s;margin:-4px 4px 0 0}
+details.acc[open]>summary::after{transform:rotate(-135deg);margin-top:4px}
+details.acc>div{padding:0 16px 16px}
+details.acc>div>.muted:first-child{margin-top:-4px}
 /* Kısayollar */
 .cips{display:flex;gap:7px;overflow-x:auto;margin:10px -16px 0;padding:0 16px 4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .cips::-webkit-scrollbar{display:none}
@@ -142,7 +150,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
   <button data-t="stok"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg></span>Stok</button>
   <button data-t="giris"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>Giriş</button>
   <button data-t="kar"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 15l4-4 3 3 5-6"/><path d="M14 8h4v4"/></svg></span>Kâr</button>
-  <button data-t="diger"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></span>Diğer</button>
+  <button data-t="diger"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></span>Ayarlar</button>
 </nav>
 <div id="sheet"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
@@ -151,7 +159,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v18 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v19 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
@@ -177,7 +185,7 @@ function normalize(){
 }
 function save(){
   try { localStorage.setItem(KEY, JSON.stringify(db)); }
-  catch(e){ alert("Kaydedilemedi: telefonda yer kalmamış olabilir. Diğer → Yedek al."); }
+  catch(e){ alert("Kaydedilemedi: telefonda yer kalmamış olabilir. Ayarlar → Yedek → Yedek al."); }
 }
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2));
 const P = id => db.products.find(p=>p.id===id);
@@ -251,7 +259,7 @@ function toast(t){ const d=document.createElement("div"); d.className="toast"; d
 const $ = s => document.querySelector(s);
 const main = $("#main");
 let tab = "fiyat", durum = { q:"", pid:null, marj:null, odeme:"kart" };
-const BASLIK = { fiyat:"Fiyat Ver", stok:"Stok", giris:"Ürün Girişi", kar:"Kâr", diger:"Diğer" };
+const BASLIK = { fiyat:"Fiyat Ver", stok:"Stok", giris:"Ürün Girişi", kar:"Kâr", diger:"Ayarlar" };
 function go(t){ tab=t; $("#title").textContent=BASLIK[t]; $("#firmaAd").textContent = db.settings.firma || "Bayi Defteri"; document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t)); render(); window.scrollTo(0,0); }
 function render(){ ({fiyat:vFiyat, stok:vStok, giris:vGiris, kar:vKar, diger:vDiger})[tab](); sepetBar();
   const y = tab!=="diger" ? yedekUyari() : ""; if (y) { main.insertAdjacentHTML("afterbegin", y); $("#hizliYedek").onclick=()=>{ yedekAl(); render(); }; } }
@@ -284,7 +292,7 @@ function vFiyat(){
     const el = $("#sonuc");
     if (durum.pid && P(durum.pid)) return detay(P(durum.pid));
     const l = ara(durum.q, true).filter(p=>(!durum.kat || p.kategori===durum.kat) && (!durum.marka || (p.marka||"Markasız")===durum.marka));
-    if (!db.products.length) { el.innerHTML = `<div class="empty">Henüz ürün yok.<br>Diğer → <b>Profilo dosyalarını toplu yükle</b> ile fiyat listesi, stok dökümü ve diğer dosyaları birlikte seçin.</div>`; return; }
+    if (!db.products.length) { el.innerHTML = `<div class="empty">Henüz ürün yok.<br>Ayarlar → <b>Profilo dosyalarını toplu yükle</b> ile fiyat listesi, stok dökümü ve diğer dosyaları birlikte seçin.</div>`; return; }
     el.innerHTML = (!durum.q && !durum.kat ? bitenUyari() : "") + (l.length ? `<div class="card list">${l.slice(0,60).map(p=>{
       const st = stoktaki(p.id), ms = st.map(netMaliyet), mn = Math.min(...ms), mx = Math.max(...ms), netMi = st.some(u=>u.alis && farkTutar(u));
       return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pBas(p))}</h3><div class="muted">${esc(pAlt(p))}</div></div><div class="sag"><span class="pill">${st.length} adet</span>${degisimRozet(p.model)}<div class="muted">${!mx ? '<span class="neg">alış fiyatı yok</span>' : (netMi?"net maliyet":"maliyet")+" "+TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
@@ -539,7 +547,7 @@ async function faturaOku(f){
     sheet(`<h2>Fatura okunuyor…</h2><div class="yuk"><span class="big">⏳</span><span>e-Fatura PDF’i okunuyor.</span></div>`);
     try { const r = efaturaCoz(await pdfSatirlar(f)); if (r && r.kalemler.length) return faturaOnay(r); } catch(e){ console.warn("PDF okunamadı", e); }
     if (!db.settings.apiKey) { sheet(`<h2>Fatura tanınmadı</h2><div class="res neg">Bu PDF’in düzeni tanınmadı (taranmış ya da farklı şablon olabilir).</div><div class="muted" style="margin-top:8px">Elle giriş yapın ya da Ayarlar’a Claude API anahtarı girin.</div><button class="b" id="kapat">Tamam</button>`); $("#kapat").onclick=sheetKapat; return; }
-  } else if (!db.settings.apiKey) { alert("Fotoğraftan okuma için Diğer → Ayarlar’a Claude API anahtarı girin. e-Fatura PDF’ini seçerseniz anahtar gerekmez."); return go("diger"); }
+  } else if (!db.settings.apiKey) { alert("Fotoğraftan okuma için Ayarlar → Genel ayarlar’a Claude API anahtarı girin. e-Fatura PDF’ini seçerseniz anahtar gerekmez."); return go("diger"); }
   sheet(`<h2>Fatura okunuyor…</h2><div class="yuk"><span class="big">⏳</span><span>Kalemler çıkarılıyor, 20–60 saniye sürebilir.</span></div>`);
   let r;
   try { r = await claudeFatura(await dosyaVeri(f)); }
@@ -631,7 +639,20 @@ function vKar(){
   main.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
 }
 
-/* Diğer */
+/* Ayarlar (eski adıyla Diğer): bölümler açılır-kapanır */
+const ACIK_KEY = KEY+".acik";
+const acikBolumler = () => { try { return new Set(JSON.parse(localStorage.getItem(ACIK_KEY)||"[]")); } catch(e){ return new Set(); } };
+function akordeon(kok){
+  const acik = acikBolumler();
+  kok.querySelectorAll(":scope > .card").forEach(c=>{
+    const h = c.querySelector(":scope > h3"); if (!h) return; // başlıksız kartlar (uyarı, sürüm) hep açık
+    const ad = h.textContent.trim(), d = document.createElement("details"), sm = document.createElement("summary"), ic = document.createElement("div");
+    d.className = "card acc"; if (c.getAttribute("style")) d.setAttribute("style", c.getAttribute("style"));
+    sm.textContent = ad; h.remove(); while (c.firstChild) ic.appendChild(c.firstChild);
+    d.append(sm, ic); d.open = acik.has(ad); c.replaceWith(d);
+    d.addEventListener("toggle", ()=>{ const a = acikBolumler(); d.open ? a.add(ad) : a.delete(ad); try { localStorage.setItem(ACIK_KEY, JSON.stringify([...a])); } catch(e){} });
+  });
+}
 function vDiger(){
   const s = db.settings, son = (()=>{ try{ return localStorage.getItem(KEY+".yedek"); }catch(e){ return null; } })();
   const yedekGun = son ? gun(son) : null;
@@ -669,7 +690,7 @@ function vDiger(){
       <input type="file" id="satisDosya" accept=".xlsx,.xls,.csv,text/csv"></div>
     <div class="card"><h3>Listeden yükle</h3><div class="muted">Mevcut stok listesi: Excel (.xlsx) ya da CSV. Sütunları siz eşleştirirsiniz.</div>
       <input type="file" id="liste" accept=".xlsx,.xls,.csv,text/csv"></div>
-    <div class="card"><h3>Ayarlar</h3>
+    <div class="card"><h3>Genel ayarlar</h3>
       <div class="row"><div><label>Hedef kâr %</label><input id="aMarj" inputmode="decimal" value="${s.marj}"></div><div><label>Yıl sonu primi % (genel; PH ürünleri hariç)</label><input id="aPrim" inputmode="decimal" value="${virgul(s.prim)}"></div></div>
       <div class="muted">Ürüne özel prim oranı ürün düzenleme ekranından girilir.</div>
       <label>Komisyon oranları %</label>
@@ -686,6 +707,7 @@ function vDiger(){
     <div class="card"><div class="row sp"><span class="muted">${db.products.length} ürün · ${db.units.length} cihaz kaydı · ${db.units.filter(u=>u.satis).length} satış</span><span class="pill">${SURUM}</span></div>
       <button class="b2 red" id="hepsiSil" style="width:100%;margin-top:8px">Bütün ürün, stok ve satış kayıtlarını sil</button>
       <div class="muted">Ayarlar ve fiyat listeleri silinmez. Silmeden önce yedek almanız önerilir.</div></div>`;
+  akordeon(main);
   $("#hepsiSil").onclick=()=>{ if (!db.products.length && !db.units.length) return toast("Silinecek kayıt yok");
     if (!confirm(`${db.products.length} ürün ve ${db.units.length} cihaz kaydı (satışlar dahil) silinsin mi? Bu geri alınamaz.`)) return;
     kayitlariSil(); save(); toast("Bütün kayıtlar silindi"); vDiger(); };
@@ -1417,7 +1439,7 @@ function sepetAc(){
       <h2>Müşteri ve belge</h2>
       <div class="row"><div><label>Müşteri</label><input id="spMus" value="${esc(st.musteri)}"></div><div><label>Telefon</label><input id="spTel" inputmode="tel" value="${esc(st.tel)}"></div></div>
       <div class="row"><div><label>Fatura / fiş no</label><input id="spBelge" value="${esc(st.belge)}" placeholder="2651 ya da FİŞ"></div><div><label>Tarih</label><input id="spTar" type="date" value="${st.tarih}"></div></div>
-      ${pers.length?`<label>Satışı yapan</label><div class="seg" id="spPers">${pers.map(n=>`<button data-ps="${esc(n)}" class="${st.personel===n?"on":""}">${esc(n)}</button>`).join("")}</div>`:`<div class="muted" style="margin-top:6px">Satışı yapan personeli seçmek için Diğer → Ayarlar’a personel adlarını yazın.</div>`}
+      ${pers.length?`<label>Satışı yapan</label><div class="seg" id="spPers">${pers.map(n=>`<button data-ps="${esc(n)}" class="${st.personel===n?"on":""}">${esc(n)}</button>`).join("")}</div>`:`<div class="muted" style="margin-top:6px">Satışı yapan personeli seçmek için Ayarlar → Genel ayarlar’a personel adlarını yazın.</div>`}
       <h2>Ödeme · toplam ${TL(toplam)}</h2>
       <div class="row"><div><label>Kartla ödenen</label><input id="spKart" inputmode="decimal" value="${virgul(kart)}"></div><div><label>Kart / banka</label><select id="spBanka">${kartOps(st.bid)}</select></div></div>
       ${B?`<div class="row"><div><label>Taksit</label><select id="spN">${ns.map(n=>`<option value="${n}"${String(n)===String(st.n)?" selected":""}>${n} ${B.tur==="kredi"?"ay":"taksit"} · %${tlKisa(B.oran[n])}</option>`).join("")}</select></div></div>`:""}
