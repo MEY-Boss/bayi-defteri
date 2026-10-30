@@ -78,6 +78,7 @@ html,body{overflow-x:hidden}
 .kdv div.prim{background:var(--okbg)}
 .satir{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px}
 .satir.kapali{opacity:.45}
+.row.sp>b:last-child,.row.sp>span:last-child.big{text-align:right}
 .yuk{display:flex;align-items:center;gap:10px;padding:14px;background:var(--brand2);border-radius:10px;margin-top:10px}
 </style>
 </head>
@@ -106,7 +107,7 @@ function load(){
 }
 function normalize(){
   const d = BOS(); db.settings = Object.assign(d.settings, db.settings||{}); db.settings.kom = Object.assign(d.settings.kom, db.settings.kom||{});
-  db.products ||= []; db.units ||= [];
+  db.products ||= []; db.units ||= []; db.listeler ||= []; db.katalog ||= {};
   if ((db.v||1) < 2) { // v1: KDV hariç tutuluyordu → KDV dahile çevir
     db.units.forEach(u=>{ const o=1+(u.kdv??20)/100;
       if (u.alisHaric!=null){ u.alis=r2(u.alisHaric*o); u.ekMaliyet=r2((u.ekMaliyet||0)*o); delete u.alisHaric; }
@@ -150,8 +151,25 @@ function satisHesap(u, s){
 }
 /* Hedef kâr %'si (maliyet üstüne) için satış fiyatı; komisyon satış tutarından kesilir */
 const fiyatIcin = (c, marj, komOran) => r2(c*(1+num(marj)/100) / (1 - num(komOran)/100));
+/* Profilo aylık toptan fiyat listesi: listeler[0] en güncel; k[MODEL] = { n: nakit, v: vadeli } */
+const guncelListe = () => db.listeler[0];
+const listeFiyat = (model, i=0) => { const l = db.listeler[i]; return l && l.k[normModel(model)]; };
+function listeKutu(model, mal){
+  const l = guncelListe(), f = listeFiyat(model); if (!f) return "";
+  const once = listeFiyat(model, 1), deg = once && once.n ? (f.n-once.n)/once.n*100 : null, fark = mal!=null ? r2(f.n - mal) : null;
+  return `<div class="res" style="background:var(--brand2)"><div class="muted">Profilo’dan şu an alsa · ${esc(l.ad)}</div>
+    <div class="row sp"><span>Nakit</span><b>${TL(f.n)}</b></div>${f.v?`<div class="row sp"><span>Vadeli (opsiyonlu)</span><b>${TL(f.v)}</b></div>`:""}
+    ${fark!=null?`<div class="row sp"><span>Senin maliyetine göre</span><b class="${fark>=0?"pos":"neg"}">${fark>=0?"+":""}${TL(fark)}</b></div>`:""}
+    ${deg!=null&&Math.abs(deg)>=0.05?`<div class="muted">Geçen listeye göre ${deg>0?"+":""}%${deg.toFixed(1)} (${TL(once.n)} → ${TL(f.n)})</div>`:""}</div>`;
+}
 const stoktaki = pid => db.units.filter(u=>u.pid===pid && !u.satis);
-const pAd = p => p ? [p.marka, p.model].filter(Boolean).join(" ") + (p.ad ? " · "+p.ad : "") : "(silinmiş ürün)";
+/* Seri numarası olmayan, aynı fiyat/tarih/belgeyle girilmiş stok cihazlarını tek kartta topla */
+function gruplar(us){ const g = [], m = {};
+  us.forEach(u=>{ if (u.seri || u.satis) return g.push([u]); const k = [u.pid,u.alis,u.ekMaliyet||0,u.gTarih,u.fatura||"",u.tedarikci||""].join("|"); if (!m[k]) g.push(m[k]=[]); m[k].push(u); });
+  return g; }
+const grupBaslik = g => g[0].seri ? `Seri: ${esc(g[0].seri)}` : `${g.length} adet · seri no yok`;
+const maliyetYok = u => !u.alis ? `<div class="res neg"><b>Alış fiyatı girilmemiş.</b> <span class="muted">Ürün ekranından “Stoğun alış fiyatını değiştir” ile girin.</span></div>` : "";
+const pAd = p => p ? [p.marka, p.model].filter(Boolean).join(" ") + (p.ad ? " · "+(p.ad.length>40 ? p.ad.slice(0,38).trim()+"…" : p.ad) : "") : "(silinmiş ürün)";
 const normModel = s => String(s||"").toLocaleUpperCase("tr").replace(/\s+/g,"");
 function ara(q, sadeceStok){
   q = (q||"").toLocaleLowerCase("tr").trim();
@@ -193,7 +211,11 @@ function vFiyat(){
       const st = stoktaki(p.id), ms = st.map(maliyet), mn = Math.min(...ms), mx = Math.max(...ms);
       return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}</div></div><div class="sag"><span class="pill">${st.length} adet</span><div class="muted">maliyet ${TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
     }).join("")}</div>` : `<div class="empty">Stokta eşleşen ürün yok.</div>`;
+    const q = (durum.q||"").toLocaleLowerCase("tr").trim(), gor = new Set(l.map(p=>normModel(p.model)));
+    const kat = q.length>=2 && guncelListe() ? Object.entries(guncelListe().k).filter(([m])=>!gor.has(m) && (m.toLocaleLowerCase("tr").includes(q.replace(/\s+/g,"")) || (db.katalog[m]?.ad||"").toLocaleLowerCase("tr").includes(q))).slice(0,20) : [];
+    if (kat.length) el.innerHTML += `<h2>Profilo fiyat listesinde</h2><div class="card list">${kat.map(([m,f])=>`<div class="it tap" data-m="${esc(m)}"><div class="row sp"><div><h3>${esc(db.katalog[m]?.model||m)}</h3><div class="muted">${esc((db.katalog[m]?.ad||"").slice(0,70))}</div></div><div class="sag"><b>${TL(f.n)}</b><div class="muted">nakit</div></div></div></div>`).join("")}</div>`;
     el.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>{ durum.pid=d.dataset.p; sonuc(); });
+    el.querySelectorAll("[data-m]").forEach(d=>d.onclick=()=>katalogDetay(d.dataset.m));
   }
   function detay(p){
     const el = $("#sonuc"), st = stoktaki(p.id).sort((a,b)=>a.gTarih.localeCompare(b.gTarih));
@@ -204,16 +226,19 @@ function vFiyat(){
         <div class="row"><div><label>Hedef kâr % (maliyet üstüne)</label><input id="marj" inputmode="decimal" value="${durum.marj}"></div>
         <div><label>Ödeme</label><select id="od">${odemeOps(durum.odeme)}</select></div></div>
         <div class="muted" style="margin-top:6px">Komisyon %${kom} · tüm tutarlar KDV dahil</div>
+        ${listeKutu(p.model)}
+        ${listeFiyat(p.model)?`<div class="muted" style="margin-top:6px">Güncel liste fiyatına göre önerilen satış: <b>${TL(fiyatIcin(listeFiyat(p.model).n, durum.marj, kom))}</b></div>`:""}
       </div>
-      ${st.length ? st.map(u=>{
+      ${st.length ? gruplar(st).map(g=>{ const u = g[0];
         const o = fiyatIcin(maliyet(u), durum.marj, kom), z = fiyatIcin(maliyet(u), 0, kom), zp = fiyatIcin(primliMaliyet(u), 0, kom);
         return `<div class="card">
-          <div class="row sp"><div><b>Seri: ${esc(u.seri||"—")}</b><div class="muted">Giriş ${trDate(u.gTarih)} · ${gun(u.gTarih)} gündür stokta</div></div>${gun(u.gTarih)>90?'<span class="pill warn" style="flex:0 0 auto">bekleyen</span>':""}</div>
-          ${maliyetKutu(u)}
+          <div class="row sp"><div><b>${grupBaslik(g)}</b><div class="muted">Giriş ${trDate(u.gTarih)} · ${gun(u.gTarih)} gündür stokta</div></div>${gun(u.gTarih)>90?'<span class="pill warn" style="flex:0 0 auto">bekleyen</span>':""}</div>
+          ${maliyetKutu(u)}${maliyetYok(u)}
           ${u.ekMaliyet?`<div class="muted">Alış ${TL(u.alis)} + ek maliyet ${TL(u.ekMaliyet)}</div>`:""}
+          ${listeFiyat(p.model)&&u.alis?`<div class="muted">Şu an alsa nakit ${TL(listeFiyat(p.model).n)} · senin alışın ${TL(u.alis)} (${Math.abs(listeFiyat(p.model).n-u.alis)<1?"liste fiyatıyla aynı":(listeFiyat(p.model).n>u.alis?"ucuza almışsın ":"pahalıya almışsın ")+TL(Math.abs(listeFiyat(p.model).n-u.alis))})</div>`:""}
           <div class="res"><div class="muted">Önerilen satış fiyatı (%${durum.marj} kâr, prim hariç)</div><div class="big">${TL(o)}</div></div>
           <div class="res neg"><div class="row sp"><span class="muted">Zarar sınırı · primsiz</span><b>${TL(z)}</b></div><div class="row sp"><span class="muted">Zarar sınırı · prim düşünce</span><b>${TL(zp)}</b></div></div>
-          <button class="b" data-sat="${u.id}" data-f="${o}">Bu cihazı sat</button>
+          <button class="b" data-sat="${u.id}" data-f="${o}">${g.length>1?"Bunlardan 1 adet sat":"Bu cihazı sat"}</button>
         </div>`;}).join("") : `<div class="empty">Bu üründen stokta cihaz kalmamış.</div>`}`;
     $("#geri").onclick=()=>{ durum.pid=null; vFiyat(); };
     $("#marj").onchange=e=>{ durum.marj=num(e.target.value); detay(p); };
@@ -261,7 +286,9 @@ function vStok(){
   aramaBagla(liste); liste();
   function liste(){
     const st = db.units.filter(u=>!u.satis), top = st.reduce((a,u)=>a+maliyet(u),0), topP = st.reduce((a,u)=>a+primliMaliyet(u),0);
-    $("#ozetS").innerHTML = `<div class="card"><div class="muted">Stoktaki ${st.length} cihazın maliyeti</div><div class="kdv iki"><div><span>Prim düşmeden</span><b>${TL(top)}</b></div><div class="prim"><span>Prim düştükten sonra</span><b>${TL(topP)}</b></div></div></div>`;
+    const lis = st.filter(u=>listeFiyat(P(u.pid)?.model)), lisT = lis.reduce((a,u)=>a+listeFiyat(P(u.pid).model).n,0), lisM = lis.reduce((a,u)=>a+u.alis,0);
+    $("#ozetS").innerHTML = `<div class="card"><div class="muted">Stoktaki ${st.length} cihazın maliyeti</div><div class="kdv iki"><div><span>Prim düşmeden</span><b>${TL(top)}</b></div><div class="prim"><span>Prim düştükten sonra</span><b>${TL(topP)}</b></div></div>
+      ${lis.length?`<div class="row sp" style="margin-top:8px"><span class="muted">${lis.length} cihaz bugün alınsa (${esc(guncelListe().ad)}, nakit)</span><b>${TL(lisT)}</b></div><div class="row sp"><span class="muted">Senin alışına göre fark</span><b class="${lisT>=lisM?"pos":"neg"}">${lisT>=lisM?"+":""}${TL(lisT-lisM)}</b></div>`:""}</div>`;
     const l = ara(durum.q, durum.filt==="stok");
     $("#liste").innerHTML = l.length ? `<div class="card list">${l.map(p=>{ const n=stoktaki(p.id).length, sat=db.units.filter(u=>u.pid===p.id&&u.satis).length;
       return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pAd(p))}</h3><div class="muted">${esc(p.kategori||"")}${sat?` · ${sat} satıldı`:""}</div></div><span class="pill ${n?"":"bad"}" style="flex:0 0 auto;white-space:nowrap">${n} stokta</span></div></div>`; }).join("")}</div>` : `<div class="empty">Ürün yok.</div>`;
@@ -272,16 +299,20 @@ function urunDetay(pid){
   const p = P(pid), us = db.units.filter(u=>u.pid===pid).sort((a,b)=>(!!a.satis-!!b.satis)||a.gTarih.localeCompare(b.gTarih));
   sheet(`<div class="row sp"><h2 style="margin:0">${esc(pAd(p))}</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
     <div class="muted">${esc([p.kategori, p.barkod&&"barkod "+p.barkod, p.liste&&"liste "+TL(p.liste), "prim %"+(p.prim!=null&&p.prim!==""?p.prim:db.settings.prim+" (genel)")].filter(Boolean).join(" · "))}</div>
+    ${listeKutu(p.model)}
     <div class="row" style="margin-top:10px"><button class="b2" id="duz">Ürünü düzenle</button><button class="b2" id="ekle">Bu üründen giriş</button></div>
+    ${stoktaki(pid).length?`<button class="b2" id="topFiyat" style="width:100%;margin-top:8px">Stoğun alış fiyatını değiştir (${stoktaki(pid).length} cihaz)</button>`:""}
     <h2>Cihazlar (${us.length})</h2>
-    ${us.map(u=>{ const h = u.satis && satisKar(u); return `<div class="card"><div class="row sp"><b>Seri: ${esc(u.seri||"—")}</b>${u.satis?`<span class="pill ok" style="flex:0 0 auto">satıldı</span>`:`<span class="pill" style="flex:0 0 auto">stokta ${gun(u.gTarih)} gün</span>`}</div>
+    ${gruplar(us).map(g=>{ const u = g[0], h = u.satis && satisKar(u); return `<div class="card"><div class="row sp"><b>${u.satis?`Seri: ${esc(u.seri||"—")}`:grupBaslik(g)}</b>${u.satis?`<span class="pill ok" style="flex:0 0 auto">satıldı</span>`:`<span class="pill" style="flex:0 0 auto">stokta ${gun(u.gTarih)} gün</span>`}</div>
       <div class="muted">Giriş ${trDate(u.gTarih)}${u.tedarikci?" · "+esc(u.tedarikci):""}${u.fatura?" · fatura "+esc(u.fatura):""}</div>
-      ${maliyetKutu(u)}
+      ${maliyetKutu(u)}${u.satis?"":maliyetYok(u)}
       ${u.satis?`<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Satış ${trDate(u.satis.tarih)} · ${ODEME[u.satis.odeme]||""}</span><b>${TL(u.satis.tutar)}</b></div><div class="row sp"><span>Kâr</span><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b></div><div class="row sp"><span>Prim düşünce kâr</span><b>${TL(h.karPrimli)}</b></div>${u.satis.musteri?`<div class="muted">${esc(u.satis.musteri)}</div>`:""}</div>`:""}
-      <div class="row" style="margin-top:8px">${u.satis?`<button class="b2" data-geri="${u.id}">Satışı geri al</button>`:`<button class="b2" data-sat="${u.id}">Sat</button><button class="b2" data-ud="${u.id}">Düzenle</button>`}<button class="b2 red" data-sil="${u.id}">Sil</button></div></div>`; }).join("")}
+      <div class="row" style="margin-top:8px">${u.satis?`<button class="b2" data-geri="${u.id}">Satışı geri al</button>`:`<button class="b2" data-sat="${u.id}">Sat</button><button class="b2" data-ud="${u.id}">Düzenle</button>`}<button class="b2 red" data-sil="${u.id}">${g.length>1?"1 adet sil":"Sil"}</button></div></div>`; }).join("")}
     <button class="b2 red" id="usil" style="width:100%;margin-top:10px">Ürünü tamamen sil</button>`);
   $("#kapat").onclick=sheetKapat;
   $("#duz").onclick=()=>urunFormu(p);
+  if ($("#topFiyat")) $("#topFiyat").onclick=()=>{ const lf = listeFiyat(p.model), v = prompt(`Stoktaki ${stoktaki(pid).length} cihazın birim alış fiyatı (KDV dahil):`, virgul(lf?lf.n:stoktaki(pid)[0].alis)); if (v==null) return;
+    const n = r2(num(v)); if (!n) return alert("Geçerli bir fiyat yazın."); stoktaki(pid).forEach(u=>u.alis=n); save(); urunDetay(pid); render(); };
   $("#ekle").onclick=()=>{ sheetKapat(); durum.girisPid=pid; go("giris"); };
   $("#usil").onclick=()=>{ if(!confirm("Ürün ve tüm cihaz kayıtları silinsin mi? (satış geçmişi dahil)")) return; db.units=db.units.filter(u=>u.pid!==pid); db.products=db.products.filter(x=>x.id!==pid); save(); sheetKapat(); render(); };
   document.querySelectorAll("#sheet [data-sat]").forEach(b=>b.onclick=()=>{ const u=db.units.find(x=>x.id===b.dataset.sat); satisFormu(u.id, p.liste||fiyatIcin(maliyet(u),db.settings.marj,db.settings.kom[durum.odeme]||0)); });
@@ -317,7 +348,19 @@ function cihazFormu(u){
     save(); urunDetay(u.pid); render(); };
 }
 /* Model koduna göre ürün bul ya da aç */
+function katalogDetay(m){
+  const k = db.katalog[m] || {}, f = listeFiyat(m), kom = db.settings.kom[durum.odeme]||0;
+  sheet(`<div class="row sp"><h2 style="margin:0">${esc(k.model||m)}</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(k.ad||"")}${k.sayfa?` · ${esc(k.sayfa)} sayfası`:""}</div>
+    <div class="muted" style="margin-top:6px">Stokta yok.</div>
+    ${listeKutu(m)}
+    <div class="res"><div class="muted">Bu fiyattan alıp %${db.settings.marj} kârla satmak için</div><b class="big">${TL(fiyatIcin(f.n, db.settings.marj, kom))}</b><div class="muted">${ODEME[durum.odeme]} · komisyon %${kom}</div></div>
+    <button class="b" id="gir">Bu üründen stoğa giriş yap</button>`);
+  $("#kapat").onclick=sheetKapat;
+  $("#gir").onclick=()=>{ const p=urunBulAc({ model:k.model||m, kategori:k.kategori, ad:k.ad }); save(); sheetKapat(); durum.girisPid=p.id; durum.girisAlis=f.n; go("giris"); };
+}
 function urunBulAc(v){
+  const kt = db.katalog[normModel(v.model)]; if (kt) v = { ...v, kategori: v.kategori || kt.kategori, ad: v.ad || kt.ad };
   let p = db.products.find(x=>normModel(x.model)===normModel(v.model));
   if (!p) { p = { id:uid(), marka:v.marka||"Profilo", kategori:v.kategori||"", model:v.model.trim(), ad:v.ad||"", barkod:v.barkod||"", liste:v.liste||null, prim:v.prim??null }; db.products.push(p); }
   else { for (const a of ["kategori","ad","barkod"]) if (!p[a] && v[a]) p[a]=v[a]; }
@@ -340,7 +383,8 @@ function vGiris(){
        <div class="muted" style="margin-top:8px">ya da yeni ürün:</div>${urunAlanlari()}`}
     </div>
     <div class="card"><h3>2 · Alış fiyatı (1 adet, KDV dahil)</h3>
-      <input id="gAlis" inputmode="decimal" placeholder="0,00">
+      <input id="gAlis" inputmode="decimal" placeholder="0,00" value="${virgul(durum.girisAlis)}">
+      ${secili && listeFiyat(secili.model) ? `<div class="muted">Güncel liste: nakit ${TL(listeFiyat(secili.model).n)}${listeFiyat(secili.model).v?` · vadeli ${TL(listeFiyat(secili.model).v)}`:""}</div>` : ""}
       <label>Ek maliyet / adet — nakliye, indirme vb.</label><input id="gEk" inputmode="decimal" placeholder="0">
     </div>
     <div class="card"><h3>3 · Cihazlar</h3>
@@ -359,7 +403,7 @@ function vGiris(){
   const top = () => { const seri=$("#gSeri").value.split("\n").map(x=>x.trim()).filter(Boolean), n=seri.length||Math.max(1,parseInt($("#gAdet").value)||1), a=num($("#gAlis").value)+num($("#gEk").value);
     $("#gTop").innerHTML = a ? `<div class="card"><div class="row sp"><span>${n} cihaz · toplam maliyet</span><b>${TL(a*n)}</b></div></div>` : ""; };
   ["#gAlis","#gEk","#gSeri","#gAdet"].forEach(i=>$(i).oninput=top);
-  if (secili) $("#degis").onclick=()=>{ durum.girisPid=null; vGiris(); };
+  if (secili) $("#degis").onclick=()=>{ durum.girisPid=null; durum.girisAlis=null; vGiris(); };
   else { const gq=$("#gq"); gq.oninput=()=>{ const l=gq.value.trim()?ara(gq.value).slice(0,8):[]; $("#gsec").innerHTML=l.map(p=>`<div class="it tap" data-p="${p.id}" style="padding:8px 0;border-bottom:1px solid var(--line)">${esc(pAd(p))} <span class="muted">· ${stoktaki(p.id).length} stokta</span></div>`).join(""); $("#gsec").querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>{ durum.girisPid=d.dataset.p; vGiris(); }); }; }
   $("#gKay").onclick=()=>{
     let p = secili;
@@ -371,7 +415,7 @@ function vGiris(){
     const n = seri.length || Math.max(1, parseInt($("#gAdet").value)||1);
     const ortak = { gTarih:$("#gTar").value, alis, ekMaliyet:num($("#gEk").value), fatura:$("#gFat").value.trim(), tedarikci:$("#gTed").value.trim() };
     cihazEkle(p, n, seri, ortak);
-    durum.sonTed = ortak.tedarikci; durum.girisPid = null; save();
+    durum.sonTed = ortak.tedarikci; durum.girisPid = null; durum.girisAlis = null; save();
     toast(`${n} cihaz stoğa girdi`); vGiris();
   };
 }
@@ -498,6 +542,12 @@ function vDiger(){
       <button class="b" id="yJson">Yedek al (tam yedek)</button>
       <button class="b2" id="yXls" style="width:100%;margin-top:8px">Excel olarak indir</button>
       <label>Yedekten geri yükle</label><input type="file" id="yYukle" accept=".json,application/json"></div>
+    <div class="card"><h3>Profilo fiyat listesi (aylık)</h3>
+      ${guncelListe()?`<div class="row sp"><span>Güncel: <b>${esc(guncelListe().ad)}</b></span><span class="muted">${Object.keys(guncelListe().k).length} ürün</span></div>`:`<div class="muted">Henüz liste yüklenmedi.</div>`}
+      <div class="muted">Her ay gelen “Toptan Fiyat Listesi” Excel’ini seçin. Yüklenince her üründe “şu an alsa” fiyatı ve geçen aya göre değişim görünür.</div>
+      <input type="file" id="fListe" accept=".xlsx,.xls">
+      ${db.listeler.length>1?`<div class="muted" style="margin-top:8px">Önceki listeler: ${db.listeler.slice(1).map(l=>esc(l.ad)).join(", ")}</div>`:""}
+      ${db.listeler.length?`<button class="b2 red" id="fSil" style="width:100%;margin-top:8px">Güncel listeyi sil</button>`:""}</div>
     <div class="card"><h3>Diva’dan satışları yükle</h3><div class="muted">Diva’nın günlük satış raporunu Excel olarak alın ve buradan seçin. Satışlar seri no ya da model koduyla stoktaki cihazlara eşlenir; aynı satır iki kez yüklenmez.</div>
       <input type="file" id="satisDosya" accept=".xlsx,.xls,.csv,text/csv"></div>
     <div class="card"><h3>Listeden yükle</h3><div class="muted">Mevcut stok listesi: Excel (.xlsx) ya da CSV. Sütunları siz eşleştirirsiniz.</div>
@@ -510,7 +560,12 @@ function vDiger(){
       <label>Claude API anahtarı (fatura okuma için)</label><input id="aKey" type="password" autocomplete="off" value="${esc(s.apiKey)}" placeholder="sk-ant-…">
       <div class="muted">Anahtar yalnız bu telefonda saklanır; fatura görüntüsü okunmak için Anthropic’e gönderilir.</div>
       <button class="b" id="aKay">Ayarları kaydet</button></div>
-    <div class="card muted">${db.products.length} ürün · ${db.units.length} cihaz kaydı · ${db.units.filter(u=>u.satis).length} satış</div>`;
+    <div class="card"><div class="muted">${db.products.length} ürün · ${db.units.length} cihaz kaydı · ${db.units.filter(u=>u.satis).length} satış</div>
+      <button class="b2 red" id="hepsiSil" style="width:100%;margin-top:8px">Bütün ürün, stok ve satış kayıtlarını sil</button>
+      <div class="muted">Ayarlar ve fiyat listeleri silinmez. Silmeden önce yedek almanız önerilir.</div></div>`;
+  $("#hepsiSil").onclick=()=>{ if (!db.products.length && !db.units.length) return toast("Silinecek kayıt yok");
+    if (!confirm(`${db.products.length} ürün ve ${db.units.length} cihaz kaydı (satışlar dahil) silinsin mi? Bu geri alınamaz.`)) return;
+    kayitlariSil(); save(); toast("Bütün kayıtlar silindi"); vDiger(); };
   $("#aKay").onclick=()=>{ s.marj=num($("#aMarj").value); s.prim=num($("#aPrim").value); s.apiKey=$("#aKey").value.trim(); durum.marj=s.marj; main.querySelectorAll("[data-kom]").forEach(i=>s.kom[i.dataset.kom]=num(i.value)); save(); toast("Kaydedildi"); };
   $("#yJson").onclick=()=>{ const kopya = { ...db, settings:{ ...db.settings, apiKey:"" } };
     indir(new Blob([JSON.stringify(kopya,null,1)],{type:"application/json"}), `bayi-defteri-yedek-${today()}.json`); try{ localStorage.setItem(KEY+".yedek", today()); }catch(e){} };
@@ -522,6 +577,61 @@ function vDiger(){
     } catch(_) { alert("Bu dosya Bayi Defteri yedeği değil."); } };
   $("#liste").onchange=e=>{ const f=e.target.files[0]; if(f) listeOku(f); e.target.value=""; };
   $("#satisDosya").onchange=e=>{ const f=e.target.files[0]; if(f) satisOku(f); e.target.value=""; };
+  $("#fListe").onchange=e=>{ const f=e.target.files[0]; if(f) fiyatListesiOku(f); e.target.value=""; };
+  if ($("#fSil")) $("#fSil").onclick=()=>{ if(!confirm(`“${guncelListe().ad}” listesi silinsin mi?`)) return; db.listeler.shift(); save(); vDiger(); };
+}
+
+/* Profilo toptan fiyat listesi: her sayfada "Ürün" başlık satırı, B sütunu model, "fiyat" geçen ilk iki sütun nakit/vadeli */
+const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+function listeKategori(s){ s = s.toLocaleUpperCase("tr");
+  const t = [[/MİKRODALGA/,"Mikrodalga fırın"],[/BUZDOLAP/,"Buzdolabı"],[/DERİN DONDURUCU/,"Derin dondurucu"],[/ÇAMAŞIR/,"Çamaşır makinesi"],[/KURUTMA/,"Kurutma makinesi"],[/BULAŞIK/,"Bulaşık makinesi"],[/FIRIN/,"Fırın"],[/OCAK/,"Ocak"],[/DAVLUMBAZ|ASPİRATÖR/,"Davlumbaz"],[/KLİMA|ÜNİTE|BTU/,"Klima"],[/SÜPÜRGE|TORBA/,"Süpürge"],[/SET/,"Ankastre set"],[/SEBİL/,"Su sebili"]];
+  for (const [r,k] of t) if (r.test(s)) return k; return "Küçük ev aleti"; }
+function profiloListesiCoz(wb){
+  const sayfalar = [], k = {}, kat = {}; let tarih = "", kdvDahil = true;
+  wb.SheetNames.forEach(ad=>{
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[ad],{header:1,raw:true,defval:""}); let pc=null, ana="", alt="", n=0, cift=0;
+    rows.forEach(r=>{
+      const b = String(r[1]??"").trim(), c = String(r[2]??"").trim();
+      const t = r.map(x=>String(x)).join(" "), m = t.match(/(\d{2})\.(\d{2})\.(\d{4}) TARİHİNDEN/i); if (m && !tarih) tarih = `${m[3]}-${m[2]}-${m[1]}`;
+      if (/KDV dahil değil|KDV hariç/i.test(t)) kdvDahil = false;
+      const fiy = r.map((x,i)=>i>1 && String(x).toLocaleLowerCase("tr").includes("fiyat") ? i : -1).filter(i=>i>=0);
+      if (/^ürün( kodu)?$/i.test(b.toLocaleLowerCase("tr")) && fiy.length) { pc = fiy.slice(0,2); return; }
+      if (!pc || !b) return;
+      const nak = r[pc[0]];
+      if (typeof nak === "number" && nak > 0 && !/valör|valor|fiyat listesi/i.test(b)) {
+        const key = normModel(b); n++;
+        if (k[key]) { cift++; if (!kat[key].ad && c) Object.assign(kat[key], { ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori:listeKategori(ana+" "+alt+" "+b) }); return; }
+        k[key] = { n:r2(nak), v: typeof r[pc[1]]==="number" ? r2(r[pc[1]]) : null };
+        kat[key] = { model:b, ad:c.replace(/\s*\n\s*/g," · ").slice(0,160), kategori: /klima/i.test(ad) ? "Klima" : listeKategori(ana+" "+alt+" "+b), sayfa:ad };
+      } else if (/GENEL ÜRÜN AÇIKLAMASI/i.test(c) && b !== b.toLocaleUpperCase("tr")) alt = b;
+      else if (b === b.toLocaleUpperCase("tr") && !/\d/.test(b) && !/FİYAT|VALÖR|ÜRÜN/.test(b)) { ana = b; alt = ""; }
+    });
+    if (n) sayfalar.push({ ad, n, cift });
+  });
+  return { k, kat, tarih, kdvDahil, sayfalar };
+}
+async function fiyatListesiOku(f){
+  if (!window.XLSX) return alert("Excel modülü yüklenemedi. İnternete bağlıyken tekrar deneyin.");
+  let r; try { r = profiloListesiCoz(XLSX.read(await f.arrayBuffer(),{type:"array"})); } catch(e){ return alert("Dosya okunamadı: "+e.message); }
+  if (!Object.keys(r.k).length) return alert("Bu dosyada Profilo fiyat listesi düzeni bulunamadı (“Ürün” başlığı ve fiyat sütunları).");
+  const ay = r.tarih ? AYLAR[+r.tarih.slice(5,7)-1]+" "+r.tarih.slice(0,4) : "";
+  const stokta = db.products.filter(p=>r.k[normModel(p.model)]).length;
+  sheet(`<div class="row sp"><h2 style="margin:0">Fiyat listesini yükle</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(f.name)}</div>
+    <label>Liste adı</label><input id="flAd" value="${esc(ay||f.name.replace(/\.[^.]+$/,""))}">
+    <label>Geçerlilik tarihi</label><input id="flTar" type="date" value="${r.tarih||today()}">
+    <div class="res"><b>${Object.keys(r.k).length} ürün</b> okundu · kayıtlı ürünlerinden ${stokta} tanesi listede<br>
+      <span class="muted">${r.sayfalar.map(s=>`${esc(s.ad)}: ${s.n}`).join(" · ")}</span><br>
+      <span class="muted">Fiyatlar: ${r.kdvDahil?"KDV dahil (listenin dipnotunda yazıyor)":"KDV hariç görünüyor — %20 eklenecek"} · nakit ve vadeli (opsiyonlu) sütunları</span></div>
+    <button class="b" id="flKay">Listeyi kaydet</button>`);
+  $("#kapat").onclick=sheetKapat;
+  $("#flKay").onclick=()=>{
+    const ad = $("#flAd").value.trim()||ay, tar = $("#flTar").value||today(), c = r.kdvDahil ? 1 : 1.2;
+    const k = {}; for (const m in r.k) k[m] = { n:r2(r.k[m].n*c), v:r.k[m].v?r2(r.k[m].v*c):null };
+    db.listeler = db.listeler.filter(l=>l.tarih!==tar); db.listeler.push({ id:uid(), ad, tarih:tar, yuklendi:today(), k });
+    db.listeler.sort((a,b)=>b.tarih.localeCompare(a.tarih)); db.listeler = db.listeler.slice(0,24);
+    Object.assign(db.katalog, r.kat); save(); sheetKapat(); toast(`${ad} listesi yüklendi · ${Object.keys(k).length} ürün`); vDiger();
+  };
 }
 function indir(blob, ad){
   const f = new File([blob], ad, {type:blob.type});
@@ -608,18 +718,37 @@ async function satisOku(f){
     h.es.forEach(x=>x.u.satis=x.satis); save(); sheetKapat(); toast(`${h.es.length} satış kaydedildi`); go("kar"); };
 }
 
+/* Tüm kayıtları sil: ürünler, stok, satışlar. Ayarlar ve fiyat listeleri kalır. */
+function kayitlariSil(){ db.products = []; db.units = []; durum.pid = null; durum.girisPid = null; }
+
+/* Profilo bayi portalı stok dökümü (dgGrid.xls): URUNKODU, URUNADI, URUNTIPADI, SATILABILIR. Alış fiyatı yok → güncel listeden nakit. */
+function dgGridYukle(baslik, veri, dosyaAdi){
+  const H = baslik.map(h=>h.toLocaleUpperCase("tr")), i = ad => H.indexOf(ad);
+  const iKod=i("URUNKODU"), iAd=i("URUNADI"), iTip=i("URUNTIPADI"), iGrup=i("URUNGRUPADI"), iSat=i("SATILABILIR");
+  const satirlar = veri.map(r=>({ model:String(r[iKod]??"").trim(), ad:String(r[iAd]??"").trim(), tip:String(r[iTip]??"").trim(), grup:String(r[iGrup]??"").trim(), adet:Math.max(0,Math.round(num(r[iSat]))) }))
+    .filter(x=>x.model && x.adet>0); // ürün kodu boş satırlar ara toplam
+  const fiyatli = satirlar.filter(x=>listeFiyat(x.model)), adet = satirlar.reduce((a,x)=>a+x.adet,0);
+  const deger = fiyatli.reduce((a,x)=>a+x.adet*listeFiyat(x.model).n,0);
+  sheet(`<div class="row sp"><h2 style="margin:0">Stok dökümünü yükle</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
+    <div class="muted">${esc(dosyaAdi)} · Profilo bayi portalı stok dökümü tanındı.</div>
+    <div class="res"><b>${satirlar.length} ürün, ${adet} cihaz</b> (“Satılabilir” sütunu)<br>
+      <span class="muted">Dökümde alış fiyatı yok. Maliyet ${guncelListe()?`<b>${esc(guncelListe().ad)}</b> listesindeki nakit fiyattan`:"için önce fiyat listesi yüklenmeli"} alınır: ${fiyatli.length} ürün listede bulundu (${TL(deger)}).</span></div>
+    ${satirlar.length-fiyatli.length?`<div class="res neg"><b>${satirlar.length-fiyatli.length} ürün listede yok</b>, maliyeti boş kalır; sonra ürün ekranından “Stoğun alış fiyatını değiştir” ile girilir.<br><span class="muted">${esc(satirlar.filter(x=>!listeFiyat(x.model)).slice(0,12).map(x=>x.model).join(", "))}${satirlar.length-fiyatli.length>12?" …":""}</span></div>`:""}
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="dgSil" checked style="width:auto"> Önce mevcut bütün ürün, stok ve satış kayıtlarını sil (${db.products.length} ürün, ${db.units.length} cihaz)</label>
+    <button class="b" id="dgKay">Stoğu yükle</button>`);
+  $("#kapat").onclick=sheetKapat;
+  $("#dgKay").onclick=()=>{
+    if ($("#dgSil").checked) { if (!confirm(`Mevcut ${db.products.length} ürün ve ${db.units.length} cihaz kaydı silinip yerine bu döküm yüklensin mi?`)) return; kayitlariSil(); }
+    satirlar.forEach(x=>{ const p = urunBulAc({ model:x.model, ad:db.katalog[normModel(x.model)]?.ad || x.ad, kategori:listeKategori(x.tip+" "+x.grup) });
+      cihazEkle(p, x.adet, [], { gTarih:today(), alis: listeFiyat(x.model)?.n || 0, tedarikci:"Profilo (stok dökümü)" }); });
+    save(); sheetKapat(); toast(`${satirlar.length} ürün, ${adet} cihaz yüklendi`); durum.q=""; go("stok");
+  };
+}
+
 async function listeOku(f){
-  let rows;
-  try {
-    if (/\.csv$/i.test(f.name)) { const t=await f.text(), ilk=t.split("\n")[0], ay=(ilk.match(/;/g)||[]).length>(ilk.match(/,/g)||[]).length?";":",";
-      rows = t.split(/\r?\n/).filter(l=>l.trim()).map(l=>{ const out=[]; let c="",q=false; for(const ch of l){ if(ch==='"') q=!q; else if(ch===ay&&!q){out.push(c);c="";} else c+=ch; } out.push(c); return out.map(x=>x.trim()); }); }
-    else { if(!window.XLSX) return alert("Excel modülü yüklenemedi. İnternete bağlıyken tekrar deneyin ya da CSV kullanın.");
-      const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true}); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:""}); }
-  } catch(e){ return alert("Dosya okunamadı: "+e.message); }
-  rows = rows.filter(r=>r.some(c=>String(c).trim()));
-  if (rows.length<2) return alert("Dosyada satır bulunamadı.");
-  let bas = rows.findIndex(r=>r.filter(c=>typeof c==="string"&&c.trim()).length>=2); if (bas<0) bas=0;
-  const baslik = rows[bas].map((c,i)=>String(c).trim()||`Sütun ${i+1}`), veri = rows.slice(bas+1);
+  const t = await tabloOku(f); if (!t) return;
+  const { baslik, veri } = t;
+  if (baslik.some(h=>/^URUNKODU$/i.test(h)) && baslik.some(h=>/^SATILABILIR$/i.test(h))) return dgGridYukle(baslik, veri, f.name);
   const es = {}; ALANLAR.forEach(([k])=>{ es[k]=baslik.findIndex((h,j)=>TAHMIN[k].test(h) && !Object.values(es).includes(j)); });
   sheet(`<div class="row sp"><h2 style="margin:0">Listeden yükle</h2><button class="mini" id="kapat" style="flex:0 0 auto">Kapat</button></div>
     <div class="muted">${esc(f.name)} · ${veri.length} satır. Her alanın hangi sütundan geleceğini seçin.</div>
