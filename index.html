@@ -151,7 +151,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v15 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v16 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
 let db;
 function load(){
@@ -253,7 +253,8 @@ const main = $("#main");
 let tab = "fiyat", durum = { q:"", pid:null, marj:null, odeme:"kart" };
 const BASLIK = { fiyat:"Fiyat Ver", stok:"Stok", giris:"Ürün Girişi", kar:"Kâr", diger:"Diğer" };
 function go(t){ tab=t; $("#title").textContent=BASLIK[t]; $("#firmaAd").textContent = db.settings.firma || "Bayi Defteri"; document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t)); render(); window.scrollTo(0,0); }
-function render(){ ({fiyat:vFiyat, stok:vStok, giris:vGiris, kar:vKar, diger:vDiger})[tab](); sepetBar(); }
+function render(){ ({fiyat:vFiyat, stok:vStok, giris:vGiris, kar:vKar, diger:vDiger})[tab](); sepetBar();
+  const y = tab!=="diger" ? yedekUyari() : ""; if (y) { main.insertAdjacentHTML("afterbegin", y); $("#hizliYedek").onclick=()=>{ yedekAl(); render(); }; } }
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.t));
 const aramaKutusu = ph => `<input id="q" type="search" placeholder="${ph}" value="${esc(durum.q)}" autocomplete="off">`;
 function aramaBagla(cb){ const q=$("#q"); q.oninput=()=>{ durum.q=q.value; cb(); }; }
@@ -283,7 +284,7 @@ function vFiyat(){
     const el = $("#sonuc");
     if (durum.pid && P(durum.pid)) return detay(P(durum.pid));
     const l = ara(durum.q, true).filter(p=>(!durum.kat || p.kategori===durum.kat) && (!durum.marka || (p.marka||"Markasız")===durum.marka));
-    if (!db.products.length) { el.innerHTML = `<div class="empty">Henüz ürün yok.<br>“Giriş”ten faturayı okutun ya da Diğer → Listeden yükle.</div>`; return; }
+    if (!db.products.length) { el.innerHTML = `<div class="empty">Henüz ürün yok.<br>Diğer → <b>Profilo dosyalarını toplu yükle</b> ile fiyat listesi, stok dökümü ve diğer dosyaları birlikte seçin.</div>`; return; }
     el.innerHTML = (!durum.q && !durum.kat ? bitenUyari() : "") + (l.length ? `<div class="card list">${l.slice(0,60).map(p=>{
       const st = stoktaki(p.id), ms = st.map(netMaliyet), mn = Math.min(...ms), mx = Math.max(...ms), netMi = st.some(u=>u.alis && farkTutar(u));
       return `<div class="it tap" data-p="${p.id}"><div class="row sp"><div><h3>${esc(pBas(p))}</h3><div class="muted">${esc(pAlt(p))}</div></div><div class="sag"><span class="pill">${st.length} adet</span>${degisimRozet(p.model)}<div class="muted">${!mx ? '<span class="neg">alış fiyatı yok</span>' : (netMi?"net maliyet":"maliyet")+" "+TL(mn)}${mx!==mn?" – "+TL(mx):""}</div></div></div></div>`;
@@ -621,7 +622,9 @@ function vDiger(){
   const yedekGun = son ? gun(son) : null;
   main.innerHTML = `
     ${yedekGun===null||yedekGun>7?`<div class="card" style="background:var(--warnbg)"><b>Yedek alın.</b> <span class="muted">Veriler yalnız bu telefonda duruyor. ${son?yedekGun+" gündür yedek alınmadı.":"Hiç yedek alınmadı."}</span></div>`:""}
-    <div class="card"><h3>Yedek</h3><div class="muted">Dosyayı “Dosyalar”a, iCloud Drive’a ya da kendinize maile kaydedin.</div>
+    <div class="card" style="background:var(--brand2)"><h3>Profilo dosyalarını toplu yükle</h3><div class="muted">Fiyat listesi, fiyat farkları, banka oranları, kampanya (Word), stok dökümü ve e-fatura PDF’i birlikte seçilebilir; uygulama hangisinin ne olduğunu kendisi anlar ve doğru sırayla yükler.</div>
+      <input type="file" id="topluDosya" multiple accept=".xlsx,.xls,.docx,.pdf"></div>
+    <div class="card"><h3>Yedek</h3><div class="muted">Dosyayı “Dosyalar”a, iCloud Drive’a ya da kendinize maile kaydedin. <b class="neg">Uygulama simgesi ana ekrandan silinirse bütün kayıtlar silinir;</b> yedek varsa “Yedekten geri yükle” ile geri gelir.</div>
       <button class="b" id="yJson">Yedek al (tam yedek)</button>
       <button class="b2" id="yXls" style="width:100%;margin-top:8px">Excel olarak indir</button>
       <label>Yedekten geri yükle</label><input type="file" id="yYukle" accept=".json,application/json"></div>
@@ -673,8 +676,8 @@ function vDiger(){
     const B = varsayilanBanka(); main.querySelectorAll("[data-tk]").forEach(i=>B.oran[i.dataset.tk]=num(i.value)); if (B.id==="elle") s.taksitOrnek=false;
     s.firma=$("#aFirma").value.trim(); save(); toast("Kaydedildi"); vDiger(); };
   $("#aBanka").onchange=e=>{ s.banka=e.target.value; save(); vDiger(); };
-  $("#yJson").onclick=()=>{ const kopya = { ...db, settings:{ ...db.settings, apiKey:"" } };
-    indir(new Blob([JSON.stringify(kopya,null,1)],{type:"application/json"}), `bayi-defteri-yedek-${today()}.json`); try{ localStorage.setItem(KEY+".yedek", today()); }catch(e){} };
+  $("#yJson").onclick=()=>{ yedekAl(); vDiger(); };
+  $("#topluDosya").onchange=e=>{ const fs=[...e.target.files]; e.target.value=""; if (fs.length) topluYukle(fs); };
   $("#yXls").onclick=excelIndir;
   $("#yYukle").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
     try { const d=JSON.parse(await f.text()); if(!d.products||!d.units) throw 0;
@@ -1482,6 +1485,77 @@ function tamamlaOnerileri(kalanlar, sepettekiler){
   }
   return out;
 }
+
+/* ---------- Toplu dosya yükleme: Profilo / banka dosyaları birlikte seçilir, türü kendiliğinden tanınır ---------- */
+async function topluYukle(dosyalar){
+  if (!window.XLSX) return alert("Excel modülü yüklenemedi. İnternete bağlıyken tekrar deneyin.");
+  sheet(`<h2>Dosyalar okunuyor…</h2><div class="yuk"><span class="big">⏳</span><span>${dosyalar.length} dosya inceleniyor.</span></div>`);
+  const sonuc = [], ay = f => { const m = f.name.match(new RegExp("("+AYLAR.join("|")+")\\s*(\\d{4})","i")); return m ? m[1]+" "+m[2] : ""; };
+  const tur = []; // önce türleri belirle, sonra doğru sırayla yükle
+  for (const f of dosyalar) {
+    try {
+      if (/\.docx$/i.test(f.name)) { tur.push({ f, t:"kampanya" }); continue; }
+      if (/\.pdf$/i.test(f.name)) { tur.push({ f, t:"fatura" }); continue; }
+      if (!/\.xlsx?$/i.test(f.name)) { tur.push({ f, t:"?" }); continue; }
+      const buf = await f.arrayBuffer(), wb = XLSX.read(buf, { type:"array", cellDates:true }), wb2 = XLSX.read(buf, { type:"array" });
+      const ilk = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:"" });
+      const bas = ilk.find(r=>r.filter(c=>String(c).trim()).length>=2) || [];
+      if (bas.some(h=>/^URUNKODU$/i.test(String(h).trim())) && bas.some(h=>/^SATILABILIR$/i.test(String(h).trim()))) { tur.push({ f, t:"stok", ilk }); continue; }
+      const liste = profiloListesiCoz(wb2); if (Object.keys(liste.k).length) { tur.push({ f, t:"liste", r:liste }); continue; }
+      const fark = fiyatFarkiCoz(wb); if (Object.keys(fark.k).length || Object.keys(fark.aile).length) { tur.push({ f, t:"fark", r:fark }); continue; }
+      const banka = bankaDosyaCoz(wb2); if (banka.length) { tur.push({ f, t:"banka", r:banka }); continue; }
+      tur.push({ f, t:"?" });
+    } catch(e) { tur.push({ f, t:"hata", e:e.message||String(e) }); }
+  }
+  const SIRA = ["liste","fark","banka","kampanya","stok","fatura","?","hata"];
+  tur.sort((a,b)=>SIRA.indexOf(a.t)-SIRA.indexOf(b.t));
+  let fatura = null;
+  for (const x of tur) {
+    const ad = esc(x.f.name);
+    try {
+      if (x.t==="liste") { const r = x.r, tar = r.tarih || today(), lad = r.tarih ? AYLAR[+r.tarih.slice(5,7)-1]+" "+r.tarih.slice(0,4) : ay(x.f), c = r.kdvDahil ? 1 : 1.2, k = {};
+        for (const m in r.k) k[m] = { n:r2(r.k[m].n*c), v:r.k[m].v?r2(r.k[m].v*c):null };
+        db.listeler = db.listeler.filter(l=>l.tarih!==tar); db.listeler.push({ id:uid(), ad:lad, tarih:tar, yuklendi:today(), k });
+        db.listeler.sort((a,b)=>b.tarih.localeCompare(a.tarih)); db.listeler = db.listeler.slice(0,24); Object.assign(db.katalog, r.kat);
+        sonuc.push(`✅ Fiyat listesi · ${esc(lad)} · ${Object.keys(k).length} ürün`); }
+      else if (x.t==="fark") { const r = x.r, a = (r.sutun.match(new RegExp(AYLAR.join("|"),"i"))||[""])[0];
+        db.fiyatFarki = { ad:(a+" "+(r.bas||today()).slice(0,4)).trim(), bas:r.bas, bit:r.bit, k:r.k, aile:r.aile, yuklendi:today() };
+        sonuc.push(`✅ Fiyat farkları · ${Object.keys(r.k).length} model, Aile Bakanlığı ${Object.keys(r.aile).length} · ${trDate(r.bas)}–${trDate(r.bit)}`); }
+      else if (x.t==="banka") { db.bankalar = { ad:ay(x.f) || AYLAR[new Date().getMonth()]+" "+new Date().getFullYear(), yuklendi:today(), secenekler:x.r };
+        sonuc.push(`✅ Banka oranları · ${x.r.length} seçenek`); }
+      else if (x.t==="kampanya") { const ks = kampanyaCoz(await docxBloklar(x.f)); if (!ks.length) { sonuc.push(`⚠️ ${ad}: kampanya tablosu bulunamadı`); continue; }
+        ks.forEach(k=>k.ay = ay(x.f)); db.kampanyalar.forEach(k=>k.aktif=false); db.kampanyalar.push(...ks);
+        const eksik = ks.filter(kampanyaEksik); sonuc.push(`✅ Kampanyalar · ${ks.length} kampanya${eksik.length?` <span class="neg">— ${eksik.map(k=>esc(k.ad)).join(", ")}: model listesini Kampanyaları düzenle’den girin</span>`:""}`); }
+      else if (x.t==="stok") {
+        if (db.units.length) { sonuc.push(`⏭️ Stok dökümü atlandı: uygulamada zaten ${db.units.length} cihaz var. Değiştirmek için Listeden yükle’yi kullanın.`); continue; }
+        const r = x.ilk, bi = r.findIndex(rr=>rr.some(h=>/^URUNKODU$/i.test(String(h).trim())));
+        const baslik = r[bi].map((c,i)=>String(c).trim()||`Sütun ${i+1}`), H = baslik.map(h=>h.toLocaleUpperCase("tr")), i = n => H.indexOf(n);
+        const iKod=i("URUNKODU"), iAd=i("URUNADI"), iTip=i("URUNTIPADI"), iGrup=i("URUNGRUPADI"), iSat=i("SATILABILIR"); let n = 0, u = 0;
+        r.slice(bi+1).forEach(rr=>{ const model = String(rr[iKod]??"").trim(), adet = Math.max(0, Math.round(num(rr[iSat]))); if (!model || !adet) return;
+          const p = urunBulAc({ model, ad:db.katalog[normModel(model)]?.ad || String(rr[iAd]??"").trim(), kategori:db.katalog[normModel(model)]?.kategori || listeKategori(String(rr[iTip]??"")+" "+String(rr[iGrup]??"")) });
+          cihazEkle(p, adet, [], { gTarih:today(), alis:listeFiyat(model)?.n || 0, tedarikci:"Profilo (stok dökümü)" }); n++; u += adet; });
+        sonuc.push(`✅ Stok dökümü · ${n} ürün, ${u} cihaz${eksikler().length?` · <span class="neg">${eksikler().length} üründe alış fiyatı yok</span>`:""}`); }
+      else if (x.t==="fatura") { fatura = x.f; sonuc.push(`📄 Fatura · ${ad} — kontrol ekranı birazdan açılacak`); }
+      else if (x.t==="hata") sonuc.push(`❌ ${ad}: okunamadı (${esc(x.e)})`);
+      else sonuc.push(`❓ ${ad}: türü tanınmadı`);
+    } catch(e) { sonuc.push(`❌ ${ad}: ${esc(e.message||String(e))}`); }
+  }
+  save();
+  sheet(`<div class="row sp"><h2 style="margin:0">Yükleme özeti</h2><button class="mini" id="kapat" style="flex:0 0 auto">${fatura?"Faturaya geç":"Tamam"}</button></div>
+    <div class="card list" style="margin-top:12px">${sonuc.map(s=>`<div class="it">${s}</div>`).join("")}</div>
+    <div class="muted">Sıra: fiyat listesi → fiyat farkı → banka → kampanya → stok dökümü → fatura.</div>`);
+  $("#kapat").onclick=()=>{ sheetKapat(); render(); if (fatura) { go("giris"); faturaOku(fatura); } };
+}
+
+/* ---------- Yedek uyarısı: kayıt varsa ve 3 günden uzun süredir yedek yoksa her ekranın başında ---------- */
+const sonYedek = () => { try { return localStorage.getItem(KEY+".yedek"); } catch(e){ return null; } };
+function yedekAl(){
+  const kopya = { ...db, settings:{ ...db.settings, apiKey:"" } };
+  indir(new Blob([JSON.stringify(kopya)],{type:"application/json"}), `bayi-defteri-yedek-${today()}.json`);
+  try { localStorage.setItem(KEY+".yedek", today()); } catch(e){}
+}
+const yedekUyari = () => { if (!db.units.length) return ""; const s = sonYedek(), g = s ? gun(s) : null; if (g!==null && g<=3) return "";
+  return `<div class="card" style="background:var(--warnbg)"><div class="row sp"><div><b>Yedek alın</b><div class="muted">${g===null?"Hiç yedek alınmadı.":g+" gündür yedek yok."} Kayıtlar yalnız bu telefonda; simge silinirse hepsi gider.</div></div><button class="mini" id="hizliYedek" style="flex:0 0 auto">Yedek al</button></div></div>`; };
 
 /* Alt pencere */
 function sheet(html){ $("#sheet").innerHTML=`<div class="sheet"><div>${html}</div></div>`; document.body.style.overflow="hidden"; }
