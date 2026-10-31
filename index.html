@@ -167,8 +167,8 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v22 · 30.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
-const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"Nezih Poyraz", apiKey:"" } });
+const SURUM = "v23 · 31.10.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"", apiKey:"" } });
 let db;
 function load(){
   try { db = JSON.parse(localStorage.getItem(KEY)) || BOS(); } catch(e){ db = BOS(); }
@@ -714,12 +714,13 @@ function vDiger(){
       <div class="muted">Taksit hesabında ve satışta önce bu seçilir. Aşağıdaki oranları (toplam kesinti %) değiştirip kaydedebilirsiniz.</div>
       <div class="row" style="flex-wrap:wrap">${taksitSayilari(varsayilanBanka()).map(n=>`<div style="flex:0 0 30%"><div class="muted">${n} ${varsayilanBanka().tur==="kredi"?"ay":"taksit"}</div><input data-tk="${n}" inputmode="decimal" value="${virgul(varsayilanBanka().oran[n])}"></div>`).join("")}</div>
       ${varsayilanBanka().id==="elle"&&s.taksitOrnek?'<div class="muted neg">Elle oranlar örnek; düzeltip kaydedin ya da banka dosyasını yükleyin.</div>':""}
-      <label>Satış personeli (virgülle; satışta "Satışı yapan" olarak seçilir)</label><input id="aPers" value="${esc((s.personel||[]).join(", "))}" placeholder="ör. Alpay, Mehmet">
+      <label>Satış personeli (virgülle; satışta "Satışı yapan" olarak seçilir)</label><input id="aPers" value="${esc((s.personel||[]).join(", "))}" placeholder="ör. Ahmet, Mehmet">
       <label>Tekliflerde görünen firma adı</label><input id="aFirma" value="${esc(s.firma||"")}">
       <label>Claude API anahtarı (fatura fotoğrafı okuma için; e-fatura PDF’i anahtarsız okunur)</label><input id="aKey" type="password" autocomplete="off" value="${esc(s.apiKey)}" placeholder="sk-ant-…">
       <div class="muted">Anahtar yalnız bu telefonda saklanır; fatura görüntüsü okunmak için Anthropic’e gönderilir.</div>
       <button class="b" id="aKay">Ayarları kaydet</button></div>
     <div class="card"><div class="row sp"><span class="muted">${db.products.length} ürün · ${db.units.length} cihaz kaydı · ${db.units.filter(u=>u.satis).length} satış</span><span class="pill">${SURUM}</span></div>
+      <div class="muted" style="margin-top:6px">${kullanimOzet()}</div>
       <button class="b2 red" id="hepsiSil" style="width:100%;margin-top:8px">Bütün ürün, stok ve satış kayıtlarını sil</button>
       <div class="muted">Ayarlar ve fiyat listeleri silinmez. Silmeden önce yedek almanız önerilir.</div></div>`;
   firmaKartBagla(); akordeon(main);
@@ -1658,7 +1659,7 @@ function yedekAl(){
 const yedekUyari = () => { if (!db.units.length) return ""; const s = sonYedek(), g = s ? gun(s) : null; if (g!==null && g<=3) return "";
   return `<div class="card" style="background:var(--warnbg)"><div class="row sp"><div><b>Yedek alın</b><div class="muted">${g===null?"Hiç yedek alınmadı.":g+" gündür yedek yok."} Kayıtlar yalnız bu telefonda; simge silinirse hepsi gider.</div></div><button class="mini" id="hizliYedek" style="flex:0 0 auto">Yedek al</button></div></div>`; };
 
-/* ---------- Satış defteri Excel'i (Alpay Bey'in kendi defterinin düzeni): ay başına sekme, gün başlığı, satış satırları, gün toplamı ---------- */
+/* ---------- Satış defteri Excel'i (pilot bayinin kendi defterinin düzeni): ay başına sekme, gün başlığı, satış satırları, gün toplamı ---------- */
 const GUNLER = ["PAZAR","PAZARTESİ","SALI","ÇARŞAMBA","PERŞEMBE","CUMA","CUMARTESİ"];
 function satisIslemleri(){
   const g = {};
@@ -1700,7 +1701,7 @@ function satisDefteriIndir(){
   indir(new Blob([out],{ type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `satis-defteri-${today()}.xlsx`);
 }
 
-/* ---------- Sepet sekmesi ve satış fişi ---------- */
+/* ---------- Sepet sekmesi ve satış özeti (mali değeri yok; fatura Diva’dan) ---------- */
 function vSepet(){ if (durum.fis) return fisGoster(durum.fis); sepetAc(); }
 function yeniFisNo(){ const s = db.settings; s.fisSayac = (s.fisSayac||0) + 1; return "S-" + String(s.fisSayac).padStart(4,"0"); }
 const islemKey = u => u.satis.sepet || ("tek|"+u.id);
@@ -1719,7 +1720,7 @@ function fisGoster(key){
   const { us, s0, toplam, o } = v, s = db.settings, kmp = [...new Set(us.map(u=>u.satis.kampanya?.ad).filter(Boolean))];
   main.innerHTML = `${durum.fisYeni?`<div class="res" style="margin:0 0 12px"><b>✓ Satış tamamlandı</b><div class="muted">Faturayı Diva’dan kesmeyi unutmayın.</div></div>`:""}
     <div class="card fis" id="fis">
-      <div style="text-align:center;margin-bottom:8px"><div style="font-size:19px;font-weight:750;letter-spacing:-.01em">${esc(s.firma||"Bayi Defteri")}</div><div class="muted" style="letter-spacing:.12em;font-weight:700">SATIŞ FİŞİ</div></div>
+      <div style="text-align:center;margin-bottom:8px"><div style="font-size:19px;font-weight:750;letter-spacing:-.01em">${esc(s.firma||"Bayi Defteri")}</div><div class="muted" style="letter-spacing:.12em;font-weight:700">SATIŞ ÖZETİ</div></div>
       ${fisSatir("Fiş no", esc(s0.fisNo||"—"))}${fisSatir("Tarih", trDate(s0.tarih)+(s0.saat?" "+s0.saat:""))}
       ${s0.musteri?fisSatir("Müşteri", esc(s0.musteri)):""}${s0.tel?fisSatir("Telefon", esc(s0.tel)):""}${s0.belge?fisSatir("Fatura no", esc(s0.belge)):""}${s0.personel?fisSatir("Satış temsilcisi", esc(s0.personel)):""}
       <hr>
@@ -1730,7 +1731,7 @@ function fisGoster(key){
       ${o.kart?fisSatir(`Kredi kartı${o.kartBanka&&o.kartBanka!=="Kart"?" · "+esc(o.kartBanka.split(" · ")[0].replace(/\s*\(ertesi gün\)/,"")):""}${o.n>1?` · ${o.n} taksit`:""}`, TL(o.kart)):""}
       ${o.havale?fisSatir(`Havale${o.havaleBanka?" · "+esc(o.havaleBanka):""}`, TL(o.havale)):""}
       ${o.nakit?fisSatir("Nakit", TL(o.nakit)):""}
-      <div class="muted" style="text-align:center;margin-top:12px">Fiyatlara KDV dahildir. Bu belge fatura yerine geçmez; faturanız ayrıca düzenlenir.</div>
+      <div class="muted" style="text-align:center;margin-top:12px">Fiyatlara KDV dahildir. Bu belgenin mali değeri yoktur; fatura yerine geçmez. Faturanız ayrıca düzenlenir.</div>
     </div>
     <div class="row"><button class="b" id="fisPaylas">Paylaş</button><button class="b" id="fisYazdir" style="background:var(--brand2);color:var(--brand)">Yazdır / PDF</button></div>
     <button class="b2" id="fisPf" style="width:100%;margin-top:10px">📄 Proforma fatura${s0.faturalandi?" (Diva faturası bağlı ✓)":""}</button>
@@ -1739,11 +1740,11 @@ function fisGoster(key){
   $("#fisYazdir").onclick=()=>window.print();
   $("#fisPf").onclick=()=>proformaGoster(key);
   $("#fisPaylas").onclick=async()=>{
-    const metin = [ s.firma||"", "SATIŞ FİŞİ", `Fiş no: ${s0.fisNo||"—"} · ${trDate(s0.tarih)}${s0.saat?" "+s0.saat:""}`, s0.musteri?`Müşteri: ${s0.musteri}`:null, s0.belge?`Fatura no: ${s0.belge}`:null, "",
+    const metin = [ s.firma||"", "SATIŞ ÖZETİ", `Fiş no: ${s0.fisNo||"—"} · ${trDate(s0.tarih)}${s0.saat?" "+s0.saat:""}`, s0.musteri?`Müşteri: ${s0.musteri}`:null, s0.belge?`Fatura no: ${s0.belge}`:null, "",
       ...us.map(u=>`• ${pBas(P(u.pid))}${u.seri?" ("+u.seri+")":""}: ${TL(u.satis.tutar)}`), kmp.length?`Kampanya: ${kmp.join(", ")}`:null, "", `TOPLAM: ${TL(toplam)}`,
-      o.kart?`Kredi kartı${o.n>1?` (${o.n} taksit)`:""}: ${TL(o.kart)}`:null, o.havale?`Havale: ${TL(o.havale)}`:null, o.nakit?`Nakit: ${TL(o.nakit)}`:null, "", "Fiyatlara KDV dahildir. Bu belge fatura yerine geçmez." ].filter(x=>x!==null).join("\n");
-    try { if (navigator.share) await navigator.share({ text:metin }); else { await navigator.clipboard.writeText(metin); toast("Fiş metni kopyalandı"); } }
-    catch(e){ if (e && e.name!=="AbortError") { try { await navigator.clipboard.writeText(metin); toast("Fiş metni kopyalandı"); } catch(_) { alert(metin); } } }
+      o.kart?`Kredi kartı${o.n>1?` (${o.n} taksit)`:""}: ${TL(o.kart)}`:null, o.havale?`Havale: ${TL(o.havale)}`:null, o.nakit?`Nakit: ${TL(o.nakit)}`:null, "", "Fiyatlara KDV dahildir. Bu belgenin mali değeri yoktur; fatura yerine geçmez." ].filter(x=>x!==null).join("\n");
+    try { if (navigator.share) await navigator.share({ text:metin }); else { await navigator.clipboard.writeText(metin); toast("Özet metni kopyalandı"); } }
+    catch(e){ if (e && e.name!=="AbortError") { try { await navigator.clipboard.writeText(metin); toast("Özet metni kopyalandı"); } catch(_) { alert(metin); } } }
   };
 }
 /* Sepet boşken: son satışlar (dokununca fişi açılır) */
@@ -1882,7 +1883,7 @@ function efaturaTaraflar(sayfalar){
   const kes = alici0.findIndex(s=>/^(ettn|sıra|sira|mal hizmet|malzeme)/i.test(s)); const temiz = s => s.replace(/\s+Malzeme\s*\/?$/i,""); // tablo başlığı sızmasın
   return { satici:taraf(satici), alici:taraf((kes>=0 ? alici0.slice(0,kes) : alici0).map(temiz)), ettn };
 }
-const bizMiyiz = x => { const f = firmaBilgi(); return !!x && ((f.vkn && x.vkn===f.vkn) || (x.ad && trk(x.ad).includes(trk(db.settings.firma||"nezih poyraz")))); };
+const bizMiyiz = x => { const f = firmaBilgi(); return !!x && ((f.vkn && x.vkn===f.vkn) || (!!db.settings.firma && x.ad && trk(x.ad).includes(trk(db.settings.firma)))); };
 
 /* ---------- Diva'da kesilmiş satış faturası: numarayla satışa bağla ya da satışı oluştur ---------- */
 function satisFaturasi(r){
@@ -1997,7 +1998,17 @@ function sheet(html){ $("#sheet").innerHTML=`<div class="sheet"><div>${html}</di
 function sheetKapat(){ $("#sheet").innerHTML=""; document.body.style.overflow=""; document.body.classList.remove("pencere"); }
 
 /* Başlat */
-load(); save(); go("fiyat");
+/* ---------- Kullanım sayacı (v23): yalnız bu telefonda; gün başına açılış sayısı, dışarı gönderilmez ---------- */
+function kullanimSay(){
+  const k = db.settings.kullanim ||= {}, g = today(); k[g] = (k[g]||0) + 1;
+  const sinir = new Date(Date.now()-120*864e5).toISOString().slice(0,10); for (const t in k) if (t < sinir) delete k[t];
+}
+function kullanimOzet(){
+  const bas = new Date(Date.now()-29*864e5).toISOString().slice(0,10), k = db.settings.kullanim || {};
+  const gun = Object.keys(k).filter(t=>t>=bas).length, ss = db.units.filter(u=>u.satis && u.satis.tarih>=bas), app = ss.filter(u=>!u.satis.kaynak).length;
+  return `Son 30 gün: ${gun} gün açıldı · ${ss.length} satış${ss.length?` (${app} uygulamadan, ${ss.length-app} Diva’dan)`:""}`;
+}
+load(); kullanimSay(); save(); go("fiyat");
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
 if ("serviceWorker" in navigator && location.protocol!=="file:") navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
