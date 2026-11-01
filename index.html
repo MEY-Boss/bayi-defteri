@@ -81,6 +81,10 @@ button.mini{white-space:nowrap;border:0;border-radius:10px;padding:7px 11px;font
 .seg{display:flex;background:var(--soft);border-radius:12px;padding:3px;gap:3px}
 .seg button{flex:1;border:0;border-radius:9px;padding:9px 4px;background:transparent;color:var(--muted);font-size:14px;font-weight:600}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
+.donem{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 8px}
+.donem button{flex:0 0 auto;border:1.5px solid var(--line);border-radius:999px;padding:7px 13px;background:var(--card);color:var(--ink);font-size:14px;font-weight:600}
+.donem button.on{background:var(--brand);color:var(--brandInk);border-color:var(--brand)}
+.gunbas{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:700;color:var(--muted);margin:14px 4px 6px}
 
 /* Rakam kutuları, rozetler, bilgi kutuları */
 .kdv{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
@@ -167,7 +171,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v24 · 01.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v25 · 01.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"", apiKey:"" } });
 let db;
 function load(){
@@ -621,20 +625,46 @@ function faturaOnay(r){
 }
 
 /* Kâr */
+/* Satış dönemi kısayolları: Sepet'teki satış listesi ve Kâr ekranı aynı seçimi kullanır */
+const gunEkle = (s,n) => { const d = new Date(s+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); };
+const ayAdi = a => new Date(a+"-01T00:00:00Z").toLocaleDateString("tr-TR",{month:"long",year:"numeric",timeZone:"UTC"});
+const gunAdi = s => new Date(s+"T00:00:00Z").toLocaleDateString("tr-TR",{weekday:"long",timeZone:"UTC"});
+const DONEMLER = [["bugun","Bugün"],["dun","Dün"],["hafta","Bu hafta"],["ay","Bu ay"],["gecenay","Geçen ay"],["tum","Tümü"]];
+function donem(){
+  const p = (durum.sf ||= { p:"ay", sube:"" }).p, t = today();
+  if (p==="bugun") return { bas:t, bit:t, ad:"Bugün" };
+  if (p==="dun") { const d = gunEkle(t,-1); return { bas:d, bit:d, ad:"Dün" }; }
+  if (p==="hafta") { const g = (new Date(t+"T00:00:00Z").getUTCDay()+6)%7; return { bas:gunEkle(t,-g), bit:t, ad:"Bu hafta" }; }
+  const a = p==="ay" ? t.slice(0,7) : p==="gecenay" ? gunEkle(t.slice(0,7)+"-01",-1).slice(0,7) : p.startsWith("m:") ? p.slice(2) : "";
+  return a ? { bas:a+"-01", bit:a+"-31", ad:ayAdi(a) } : { bas:"", bit:"9999", ad:"Tümü" };
+}
+const donemde = s => { const d = donem(); return s.tarih>=d.bas && s.tarih<=d.bit && (!durum.sf.sube || s.sube===durum.sf.sube); };
+function donemSecHtml(){
+  const sf = (durum.sf ||= { p:"ay", sube:"" }), aylar = [...new Set(db.units.filter(u=>u.satis).map(u=>u.satis.tarih.slice(0,7)))].sort().reverse();
+  return `<div class="donem">${DONEMLER.map(([k,a])=>`<button data-donem="${k}" class="${sf.p===k?"on":""}">${a}</button>`).join("")}</div>
+    ${aylar.length>1 || SUBELER().length ? `<div class="row">${aylar.length>1?`<select id="donemAy"><option value="">Ay seç…</option>${aylar.map(a=>`<option value="m:${a}"${sf.p==="m:"+a?" selected":""}>${ayAdi(a)}</option>`).join("")}</select>`:""}${SUBELER().length?`<select id="donemSube"><option value="">Tüm şubeler</option>${SUBELER().map(x=>`<option${sf.sube===x?" selected":""}>${esc(x)}</option>`).join("")}</select>`:""}</div>` : ""}`;
+}
+function donemBagla(yenile){
+  main.querySelectorAll("[data-donem]").forEach(b=>b.onclick=()=>{ durum.sf.p = b.dataset.donem; yenile(); });
+  if ($("#donemAy")) $("#donemAy").onchange=e=>{ if (e.target.value) { durum.sf.p = e.target.value; yenile(); } };
+  if ($("#donemSube")) $("#donemSube").onchange=e=>{ durum.sf.sube = e.target.value; yenile(); };
+}
+/* Listeyi güne (Tümü seçiliyse aya) göre başlıklarla böler; l tarihe göre yeniden eskiye sıralı */
+function gruplu(l, tarihF, tutarF, satirF, birim){
+  const tum = durum.sf.p==="tum", g = new Map();
+  l.forEach(x=>{ const t = tarihF(x), k = tum ? t.slice(0,7) : t; if (!g.has(k)) g.set(k,[]); g.get(k).push(x); });
+  return [...g].map(([k,xs])=>`<div class="gunbas"><span>${tum ? ayAdi(k) : trDate(k)+" · "+gunAdi(k)}</span><span>${xs.length} ${birim} · ${TL(r2(xs.reduce((a,x)=>a+tutarF(x),0)))}</span></div><div class="card list">${xs.map(satirF).join("")}</div>`).join("");
+}
 function vKar(){
-  const aylar = [...new Set(db.units.filter(u=>u.satis).map(u=>u.satis.tarih.slice(0,7)))].sort().reverse();
-  const buAy = today().slice(0,7); if (!aylar.includes(buAy)) aylar.unshift(buAy);
-  durum.ay ||= buAy;
-  const sat = db.units.filter(u=>u.satis && (durum.ay==="hepsi" || u.satis.tarih.startsWith(durum.ay))).sort((a,b)=>b.satis.tarih.localeCompare(a.satis.tarih));
+  const sat = db.units.filter(u=>u.satis && donemde(u.satis)).sort((a,b)=>b.satis.tarih.localeCompare(a.satis.tarih));
   const H = sat.map(u=>[u,satisKar(u)]), KARLI = new Set(["kar","karPrimli","maliyet"]), T = k => r2(H.reduce((a,[u,h])=>a+(KARLI.has(k) && !u.alis ? 0 : h[k]),0)), bilinmeyen = H.filter(([u])=>!u.alis).length;
   const sb = {}; H.forEach(([u,h])=>{ const k = u.satis.sube || "Şube seçilmemiş"; sb[k] ||= {n:0,ciro:0,kar:0}; sb[k].n++; sb[k].ciro+=h.tutar; if (u.alis) sb[k].kar+=h.kar; });
   const kat = {}; H.forEach(([u,h])=>{ const k=(P(u.pid)?.kategori)||"Diğer"; kat[k] ||= {n:0,kar:0,karP:0}; kat[k].n++; if (u.alis) { kat[k].kar+=h.kar; kat[k].karP+=h.karPrimli; } });
   const yil = today().slice(0,4), alimYil = db.units.filter(u=>u.gTarih.startsWith(yil)), primYil = r2(alimYil.reduce((a,u)=>a+primTutar(u),0)), alimTop = r2(alimYil.reduce((a,u)=>a+u.alis,0));
-  const ayAd = a => a==="hepsi" ? "Tümü" : new Date(a+"-01").toLocaleDateString("tr-TR",{month:"long",year:"numeric"});
   main.innerHTML = faturaKontrolKart() + `<button class="b2" id="defterXls" style="width:100%;margin-bottom:10px">📒 Satış defterini Excel’e aktar</button>
     ${bilinmeyen?`<div class="card" style="background:var(--warnbg)"><b>${bilinmeyen} satışın maliyeti bilinmiyor</b><div class="muted">Bunlar ciroya girer, kâra girmez (stoksuz satışlar).</div></div>`:""}
-    <select id="ay">${["hepsi",...aylar].map(a=>`<option value="${a}"${a===durum.ay?" selected":""}>${ayAd(a)}</option>`).join("")}</select>
-    <div class="stat" style="margin-top:10px">
+    ${donemSecHtml()}
+    <div class="stat" style="margin-top:6px">
       <div class="card"><div class="muted">Net kâr</div><div class="big ${T("kar")<0?"neg":"pos"}">${TL(T("kar"))}</div></div>
       <div class="card"><div class="muted">Prim düşünce kâr</div><div class="big pos">${TL(T("karPrimli"))}</div></div>
       <div class="card"><div class="muted">Satılan cihaz</div><b class="big">${sat.length}</b></div>
@@ -647,10 +677,10 @@ function vKar(){
     <div class="card" style="margin-top:10px"><div class="muted">${yil} alımları ve beklenen yıl sonu primi</div><div class="row sp"><span>Alım tutarı (${alimYil.length} cihaz)</span><b>${TL(alimTop)}</b></div><div class="row sp"><span>Beklenen prim</span><b class="pos">${TL(primYil)}</b></div></div>
     ${Object.keys(sb).length && SUBELER().length?`<h2>Şubeye göre</h2><div class="card"><table><tr><th>Şube</th><th>Adet</th><th style="text-align:right">Ciro</th><th style="text-align:right">Kâr</th></tr>${Object.entries(sb).sort((a,b)=>b[1].ciro-a[1].ciro).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.n}</td><td style="text-align:right">${TL(v.ciro)}</td><td style="text-align:right" class="${v.kar<0?"neg":"pos"}">${TL(v.kar)}</td></tr>`).join("")}</table></div>`:""}
     ${Object.keys(kat).length?`<h2>Kategoriye göre</h2><div class="card"><table><tr><th>Kategori</th><th>Adet</th><th style="text-align:right">Kâr</th><th style="text-align:right">Primli</th></tr>${Object.entries(kat).sort((a,b)=>b[1].kar-a[1].kar).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.n}</td><td style="text-align:right" class="${v.kar<0?"neg":"pos"}">${TL(v.kar)}</td><td style="text-align:right">${TL(v.karP)}</td></tr>`).join("")}</table></div>`:""}
-    <h2>Satışlar</h2>
-    ${sat.length?`<div class="card list">${H.map(([u,h])=>`<div class="it tap" data-p="${u.pid}"><div class="row sp"><div><b>${esc(pAd(P(u.pid)))}</b><div class="muted">${trDate(u.satis.tarih)} · seri ${esc(u.seri||"—")} · ${ODEME[u.satis.odeme]||""}</div></div><div class="sag">${u.alis?`<b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b>`:'<span class="muted">maliyet yok</span>'}<div class="muted">${TL(u.satis.tutar)}</div></div></div></div>`).join("")}</div>`:`<div class="empty">Bu dönemde satış yok.</div>`}
+    <h2>Satışlar · ${esc(donem().ad)}</h2>
+    ${sat.length?gruplu(H, ([u])=>u.satis.tarih, ([u])=>u.satis.tutar, ([u,h])=>`<div class="it tap" data-p="${u.pid}"><div class="row sp"><div><b>${esc(pAd(P(u.pid)))}</b><div class="muted">seri ${esc(u.seri||"—")} · ${ODEME[u.satis.odeme]||""}${u.satis.sube?" · "+esc(u.satis.sube):""}</div></div><div class="sag">${u.alis?`<b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b>`:'<span class="muted">maliyet yok</span>'}<div class="muted">${TL(u.satis.tutar)}</div></div></div></div>`, "cihaz"):`<div class="empty">Bu dönemde satış yok.</div>`}
     <div class="muted" style="margin-top:8px">Tüm tutarlar KDV dahil. Kâr = satış − maliyet − komisyon − ek gider + kampanya primi + fiyat farkı. Primli kâr, cihazın yıl sonu primini de ekler.</div>`;
-  $("#ay").onchange=e=>{ durum.ay=e.target.value; vKar(); };
+  donemBagla(vKar);
   $("#defterXls").onclick=satisDefteriIndir; faturaKontrolBagla();
   if ($("#alacakAc")) $("#alacakAc").onclick=alacakDefteri;
   main.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
@@ -1762,10 +1792,13 @@ function fisGoster(key){
 function sepetBos(){
   const g = {}; db.units.filter(u=>u.satis).forEach(u=>{ const k = islemKey(u); (g[k] ||= []).push(u); });
   const l = Object.entries(g).map(([k,us])=>({ k, s0:us[0].satis, n:us.length, t:r2(us.reduce((a,u)=>a+u.satis.tutar,0)), ad:us.map(u=>P(u.pid)?.model).join(", ") }))
-    .sort((a,b)=>(b.s0.tarih+(b.s0.saat||"")).localeCompare(a.s0.tarih+(a.s0.saat||""))).slice(0,20);
+    .sort((a,b)=>(b.s0.tarih+(b.s0.saat||"")).localeCompare(a.s0.tarih+(a.s0.saat||"")));
+  const f = l.filter(x=>donemde(x.s0)), ciro = r2(f.reduce((a,x)=>a+x.t,0)), adet = f.reduce((a,x)=>a+x.n,0);
   main.innerHTML = faturaKontrolKart() + `<div class="empty" style="padding:28px 12px 18px"><div style="font-size:40px">🛒</div><b style="color:var(--ink)">Sepet boş</b><br>Fiyat Ver’de üründe “Sepete ekle” ya da “Sat” deyin.</div>
-    ${l.length?`<h2>Son satışlar</h2><div class="card list">${l.map(x=>`<div class="it tap" data-fis="${esc(x.k)}"><div class="row sp"><div><b>${esc(x.s0.musteri||"Müşteri yazılmamış")}</b><div class="muted">${esc(x.s0.fisNo || (x.s0.kaynak?"Diva":"fişsiz"))} · ${trDate(x.s0.tarih)}${x.s0.sube?" · "+esc(x.s0.sube):""}${x.s0.belge?" · fatura "+esc(x.s0.belge)+(x.s0.faturalandi?" ✓":""):""} · ${x.n} ürün · ${esc(x.ad.slice(0,40))}</div></div><div class="sag"><b>${TL(x.t)}</b></div></div></div>`).join("")}</div>`:""}`;
-  faturaKontrolBagla();
+    ${l.length?`<h2>Satışlar · ${esc(donem().ad)}</h2>${donemSecHtml()}
+    <div class="card"><div class="row sp"><span>${f.length} satış · ${adet} cihaz${durum.sf.sube?" · "+esc(durum.sf.sube):""}</span><b>${TL(ciro)}</b></div></div>
+    ${f.length?gruplu(f, x=>x.s0.tarih, x=>x.t, x=>`<div class="it tap" data-fis="${esc(x.k)}"><div class="row sp"><div><b>${esc(x.s0.musteri||"Müşteri yazılmamış")}</b><div class="muted">${esc(x.s0.fisNo || (x.s0.kaynak?"Diva":"fişsiz"))}${x.s0.saat?" · "+esc(x.s0.saat):""}${x.s0.sube?" · "+esc(x.s0.sube):""}${x.s0.belge?" · fatura "+esc(x.s0.belge)+(x.s0.faturalandi?" ✓":""):""} · ${x.n} ürün · ${esc(x.ad.slice(0,40))}</div></div><div class="sag"><b>${TL(x.t)}</b></div></div></div>`, "satış"):`<div class="empty">Bu dönemde satış yok.</div>`}`:""}`;
+  faturaKontrolBagla(); donemBagla(sepetBos);
   main.querySelectorAll("[data-fis]").forEach(d=>d.onclick=()=>{ durum.fis = d.dataset.fis; durum.fisYeni = false; render(); window.scrollTo(0,0); });
 }
 
