@@ -97,6 +97,7 @@ button.mini{white-space:nowrap;border:0;border-radius:10px;padding:7px 11px;font
 .pill.ok{background:var(--okbg);color:var(--ok)} .pill.bad{background:var(--badbg);color:var(--bad)} .pill.warn{background:var(--warnbg);color:var(--warn)}
 .res{background:var(--okbg);border-radius:14px;padding:12px;margin-top:10px}
 .res.neg{background:var(--badbg)}
+.res.zarar{background:var(--badbg)}
 .res .row.sp{padding:1px 0}
 .stat{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .stat .card{margin:0}
@@ -171,7 +172,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v27 · 01.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v28 · 01.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"", apiKey:"" } });
 let db;
 function load(){
@@ -227,6 +228,9 @@ const primOran = u => primOranUrun(P(u.pid));
 const primTutar = u => r2(u.alis * primOran(u)/100);
 const primliMaliyet = u => r2(maliyet(u) - primTutar(u));
 const maliyetKutu = u => `<div class="kdv iki"><div><span>Maliyet (prim düşmeden)</span><b>${TL(maliyet(u))}</b></div><div class="prim"><span>Prim düştükten sonra · %${primOran(u)}</span><b>${TL(primliMaliyet(u))}</b></div></div>`;
+/* Kâr eksiye düşerse "Zarar" yazılır, tutar işaretsiz ve kırmızı */
+const karAd = k => k<0 ? "Zarar" : "Kâr";
+const karTL = k => `<span class="${k<0?"neg":"pos"}">${TL(Math.abs(k))}</span>`;
 function satisHesap(u, s){
   const tutar = r2(num(s.tutar)), kom = r2(tutar * num(s.komOran)/100), gider = r2(num(s.gider)), kampPrim = r2(num(s.kampPrim)), fark = r2(num(s.fark)), aile = r2(num(s.aile));
   const kar = r2(tutar - maliyet(u) - kom - gider + kampPrim + fark + aile), prim = primTutar(u);
@@ -1253,8 +1257,8 @@ function kampanyaSatis(kid, ilkId){
       <div id="kOzet"></div>
       <button class="b" id="kKay" ${ok?"":"disabled style=\"opacity:.5\""}>${ok?"Kampanyalı satışı kaydet":"Kampanya şartı henüz tamamlanmadı"}</button>`);
     const ozet = () => { const kom=num($("#kKom").value); let top=0, kar=0;
-      sec.forEach(u=>{ const f=farkBilgi(P(u.pid).model, $("#kTar").value||today()); const h=satisHesap(u,{ tutar:fiyat[u.id], komOran:kom, kampPrim: ok?prim:0, fark: f&&f.icinde?f.tutar:0 }); top+=h.tutar; kar+=h.kar; });
-      $("#kOzet").innerHTML = `<div class="res ${kar<0?"neg":""}"><div class="row sp"><span>Toplam satış</span><b>${TL(top)}</b></div><div class="row sp"><span>Bayi primi</span><b>${ok?"+"+TL(k.prim):"—"}</b></div><div class="row sp"><span class="big">Toplam kâr</span><span class="big ${kar<0?"neg":"pos"}">${TL(kar)}</span></div></div>`; };
+      sec.forEach(u=>{ const f=farkBilgi(P(u.pid).model, $("#kTar").value||today()); const h=satisHesap(u,{ tutar:fiyat[u.id], komOran:kom, kampPrim: ok?prim:0, fark: f&&f.icinde?f.tutar:0 }); top+=h.tutar; kar+=h.karPrimli; });
+      $("#kOzet").innerHTML = `<div class="res ${kar<0?"zarar":""}"><div class="row sp"><span>Toplam satış</span><b>${TL(top)}</b></div><div class="row sp"><span>Bayi primi</span><b class="pos">${ok?"+"+TL(k.prim):"—"}</b></div><div class="row sp"><span class="big">Toplam ${karAd(kar).toLocaleLowerCase("tr")}</span><span class="big">${karTL(kar)}</span></div><div class="muted">Yıl sonu primi dahil.</div></div>`; };
     document.querySelectorAll("[data-fy]").forEach(i=>i.oninput=()=>{ fiyat[i.dataset.fy]=num(i.value); ozet(); });
     document.querySelectorAll("[data-cik]").forEach(b=>b.onclick=()=>{ sec.splice(+b.dataset.cik,1); ciz(); });
     document.querySelectorAll("[data-ekle]").forEach(d=>d.onclick=()=>{ const u = stoktaki(d.dataset.ekle).find(x=>!sec.includes(x)); sec.push(u); fiyat[u.id]=oner(u); q=""; ciz(); });
@@ -1391,11 +1395,11 @@ function satisFormu(uidSec, fiyat){
   const oku = () => ({ tutar:$("#sTutar").value, odeme:$("#sOd").value, komOran:num($("#sKom").value), gider:$("#sGider").value, tarih:$("#sTarih").value||today(), musteri:$("#sMus").value.trim(), not:$("#sNot").value.trim(),
     fark: $("#sFf") && $("#sFf").checked ? farkBilgi(p.model).tutar : 0, aile: $("#sAile") && $("#sAile").checked ? aileFark(p.model) : 0 });
   const ozet = () => { const h = satisHesap(u, oku());
-    $("#sOzet").innerHTML = `<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Alış maliyeti</span><b>${TL(h.maliyet)}</b></div>
+    $("#sOzet").innerHTML = `<div class="res ${h.karPrimli<0?"zarar":""}"><div class="row sp"><span>Alış maliyeti</span><b>${TL(h.maliyet)}</b></div>
       ${h.fark?`<div class="row sp"><span>Profilo fiyat farkı</span><b class="pos">−${TL(h.fark)}</b></div>`:""}${h.aile?`<div class="row sp"><span>Aile Bakanlığı farkı</span><b class="pos">−${TL(h.aile)}</b></div>`:""}${h.prim?`<div class="row sp"><span>Yıl sonu primi (%${tlKisa(primOran(u))})</span><b class="pos">−${TL(h.prim)}</b></div>`:""}
       <div class="row sp"><span>Net maliyet</span><b>${TL(h.net)}</b></div><hr>
-      <div class="row sp"><span>Satış</span><b>${TL(h.tutar)}</b></div><div class="row sp"><span>Net maliyet</span><b>−${TL(h.net)}</b></div><div class="row sp"><span>Komisyon</span><b>−${TL(h.kom)}</b></div>${h.gider?`<div class="row sp"><span>Ek gider</span><b>−${TL(h.gider)}</b></div>`:""}
-      <div class="row sp" style="margin-top:4px"><span class="big">Kâr</span><span class="big ${h.karPrimli<0?"neg":"pos"}">${TL(h.karPrimli)}</span></div>
+      <div class="row sp"><span>Satış</span><b>${TL(h.tutar)}</b></div><div class="row sp"><span>Net maliyet</span><b class="neg">−${TL(h.net)}</b></div><div class="row sp"><span>Komisyon</span><b class="neg">−${TL(h.kom)}</b></div>${h.gider?`<div class="row sp"><span>Ek gider</span><b class="neg">−${TL(h.gider)}</b></div>`:""}
+      <div class="row sp" style="margin-top:4px"><span class="big">${karAd(h.karPrimli)}</span><span class="big">${karTL(h.karPrimli)}</span></div>
       ${h.prim?`<div class="row sp"><span>Prim hariç kâr</span><b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b></div>`:""}
       <div class="muted">Maliyete göre %${h.oran.toFixed(1)} · yıl sonu primi ${TL(h.prim)}</div></div>`; };
   $("#sOd").onchange=e=>{ const t = e.target.value==="taksit"; $("#sTk").classList.toggle("hide",!t); if (t) tkCiz(); else $("#sKom").value = s.kom[e.target.value]||0; ozet(); };
@@ -1483,7 +1487,7 @@ function sepetAc(){
       ${H.map(([u,h])=>{ const p = P(u.pid), a = aileFark(p.model); return `<div class="satir">
         <div class="row sp"><div><b>${esc(pBas(p))}</b><div class="muted">${esc(pAlt(p))}</div></div><button class="mini" data-sc="${u.id}" style="flex:0 0 auto">Çıkar</button></div>
         ${u.alis?`<div class="row sp" style="margin-top:4px"><span>Net maliyet</span><b>${TL(h.net)}</b></div><div class="muted">Alış ${TL(h.maliyet)}${h.kampPrim?` − <span class="pos">${esc(kmpAd[u.id].ad)} ${TL(h.kampPrim)}</span>`:""}${h.fark?` − <span class="pos">fiyat farkı ${TL(h.fark)}</span>`:""}${h.aile?` − <span class="pos">Aile Bakanlığı ${TL(h.aile)}</span>`:""}${h.prim?` − <span class="pos">yıl sonu primi %${tlKisa(primOran(u))} ${TL(h.prim)}</span>`:""}${u.seri?" · seri "+esc(u.seri):""}</div>`:`<div class="muted"><span class="neg">Maliyet bilinmiyor${u.stoksuz?" (stoksuz)":""}</span>${u.seri?" · seri "+esc(u.seri):""}</div>`}
-        <div class="row"><div><label>Satış fiyatı (KDV dahil)</label><input data-sf="${u.id}" inputmode="decimal" value="${virgul(fiyat[u.id])}"></div><div style="flex:0 0 auto;text-align:right"><label>Kâr</label>${u.alis?`<b class="${h.karPrimli<0?"neg":"pos"}">${TL(h.karPrimli)}</b>${h.kom||h.gider?`<div class="muted" style="font-size:12px">komisyon${h.gider?" + gider":""} −${TL(r2(h.kom+h.gider))}</div>`:""}${h.prim?`<div class="muted" style="font-size:12px">primsiz ${TL(h.kar)}</div>`:""}`:`<span class="muted">—</span>`}</div></div>
+        <div class="row"><div><label>Satış fiyatı (KDV dahil)</label><input data-sf="${u.id}" inputmode="decimal" value="${virgul(fiyat[u.id])}"></div><div style="flex:0 0 auto;text-align:right"><label>${u.alis?karAd(h.karPrimli):"Kâr"}</label>${u.alis?`<b>${karTL(h.karPrimli)}</b>${h.kom||h.gider?`<div class="muted" style="font-size:12px">komisyon${h.gider?" + gider":""} −${TL(r2(h.kom+h.gider))}</div>`:""}${h.prim?`<div class="muted" style="font-size:12px">primsiz ${TL(h.kar)}</div>`:""}`:`<span class="muted">—</span>`}</div></div>
         ${a?`<label style="display:flex;gap:8px;align-items:center;margin:4px 0 0"><input type="checkbox" data-aile="${u.id}" ${st.aile.has(u.id)?"checked":""} style="width:auto"> Aile Bakanlığı +${TL(a)}</label>`:""}</div>`; }).join("")}
       ${st.yeni ? `<div class="satir" style="background:var(--brand2)"><b>Stokta olmayan ürün</b>
           <div class="row"><div style="flex:0 0 38%"><label>Marka</label><input id="ysMarka" list="markalar2" placeholder="Altus, Tecna…"></div><div><label>Ürün / model</label><input id="ysAd" placeholder="ör. AL KM 1160 çamaşır"></div></div>
@@ -1503,9 +1507,10 @@ function sepetAc(){
       <div class="row sp" style="margin-top:8px"><span>Nakit (kalan)</span><b>${TL(nakit)}</b></div>
       <div class="muted">Kart kesintisi: ${TL(komTop)} (%${tlKisa(kartOran)}, yalnız kartla ödenen kısma)</div>
       <div class="row"><div><label>Ek gider (montaj, nakliye) ₺</label><input id="spGider" inputmode="decimal" value="${esc(st.gider)}" placeholder="0"></div><div><label>Not</label><input id="spNot" value="${esc(st.not)}"></div></div>
-      <div class="res ${TK("kar")<0?"neg":""}"><div class="row sp"><span>Toplam satış</span><b>${TL(toplam)}</b></div><div class="row sp"><span>Maliyet</span><b>−${TL(TK("maliyet"))}</b></div><div class="row sp"><span>Kart kesintisi + ek gider</span><b>−${TL(T("kom")+T("gider"))}</b></div>
-        ${T("kampPrim")?`<div class="row sp"><span>Kampanya primleri</span><b>+${TL(T("kampPrim"))}</b></div>`:""}${T("fark")+T("aile")?`<div class="row sp"><span>Fiyat farkları</span><b>+${TL(T("fark")+T("aile"))}</b></div>`:""}
-        <div class="row sp" style="margin-top:4px"><span class="big">Kâr</span><span class="big ${TK("kar")<0?"neg":"pos"}">${TL(TK("kar"))}</span></div>
+      <div class="res ${TK("karPrimli")<0?"zarar":""}"><div class="row sp"><span>Toplam satış</span><b>${TL(toplam)}</b></div><div class="row sp"><span>Maliyet</span><b class="neg">−${TL(TK("maliyet"))}</b></div><div class="row sp"><span>Kart kesintisi + ek gider</span><b class="neg">−${TL(T("kom")+T("gider"))}</b></div>
+        ${T("kampPrim")?`<div class="row sp"><span>Kampanya primleri</span><b class="pos">+${TL(T("kampPrim"))}</b></div>`:""}${T("fark")+T("aile")?`<div class="row sp"><span>Fiyat farkları</span><b class="pos">+${TL(T("fark")+T("aile"))}</b></div>`:""}${TK("prim")?`<div class="row sp"><span>Yıl sonu primi</span><b class="pos">+${TL(TK("prim"))}</b></div>`:""}
+        <div class="row sp" style="margin-top:4px"><span class="big">${karAd(TK("karPrimli"))}</span><span class="big">${karTL(TK("karPrimli"))}</span></div>
+        ${TK("prim")?`<div class="row sp muted"><span>Prim hariç</span><b style="font-weight:600">${TL(TK("kar"))}</b></div>`:""}
         ${bilinen.length<H.length?`<div class="muted">${H.length-bilinen.length} ürünün maliyeti bilinmediği için kâra katılmadı.</div>`:""}</div>
       <button class="b" id="spKay" ${us.length?"":"disabled"}>Satışı tamamla</button>
       <div class="row" style="margin-top:8px"><button class="b2" id="spTeklif">Teklif gönder</button><button class="b2 red" id="spBos">Sepeti boşalt</button></div>`);
