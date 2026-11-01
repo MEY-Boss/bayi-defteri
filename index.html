@@ -171,7 +171,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v25 · 01.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v26 · 01.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"", apiKey:"" } });
 let db;
 function load(){
@@ -230,7 +230,8 @@ const maliyetKutu = u => `<div class="kdv iki"><div><span>Maliyet (prim düşmed
 function satisHesap(u, s){
   const tutar = r2(num(s.tutar)), kom = r2(tutar * num(s.komOran)/100), gider = r2(num(s.gider)), kampPrim = r2(num(s.kampPrim)), fark = r2(num(s.fark)), aile = r2(num(s.aile));
   const kar = r2(tutar - maliyet(u) - kom - gider + kampPrim + fark + aile), prim = primTutar(u);
-  return { tutar, kom, gider, kampPrim, fark, aile, maliyet:maliyet(u), kar, prim, karPrimli:r2(kar+prim), oran: maliyet(u) ? kar/maliyet(u)*100 : 0 };
+  /* Net maliyet: alış − kampanya (bundle) primi − fiyat farkı − Aile Bakanlığı farkı (Alpay Bey 01.11) */
+  return { tutar, kom, gider, kampPrim, fark, aile, maliyet:maliyet(u), net:r2(maliyet(u) - kampPrim - fark - aile), kar, prim, karPrimli:r2(kar+prim), oran: maliyet(u) ? kar/maliyet(u)*100 : 0 };
 }
 /* Hedef kâr %'si (maliyet üstüne) için satış fiyatı; komisyon satış tutarından kesilir */
 const fiyatIcin = (c, marj, komOran) => r2(c*(1+num(marj)/100) / (1 - num(komOran)/100));
@@ -1390,8 +1391,10 @@ function satisFormu(uidSec, fiyat){
   const oku = () => ({ tutar:$("#sTutar").value, odeme:$("#sOd").value, komOran:num($("#sKom").value), gider:$("#sGider").value, tarih:$("#sTarih").value||today(), musteri:$("#sMus").value.trim(), not:$("#sNot").value.trim(),
     fark: $("#sFf") && $("#sFf").checked ? farkBilgi(p.model).tutar : 0, aile: $("#sAile") && $("#sAile").checked ? aileFark(p.model) : 0 });
   const ozet = () => { const h = satisHesap(u, oku());
-    $("#sOzet").innerHTML = `<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Satış</span><b>${TL(h.tutar)}</b></div><div class="row sp"><span>Maliyet</span><b>−${TL(h.maliyet)}</b></div><div class="row sp"><span>Komisyon</span><b>−${TL(h.kom)}</b></div><div class="row sp"><span>Ek gider</span><b>−${TL(h.gider)}</b></div>
-      ${h.fark?`<div class="row sp"><span>Profilo fiyat farkı</span><b>+${TL(h.fark)}</b></div>`:""}${h.aile?`<div class="row sp"><span>Aile Bakanlığı farkı</span><b>+${TL(h.aile)}</b></div>`:""}
+    $("#sOzet").innerHTML = `<div class="res ${h.kar<0?"neg":""}"><div class="row sp"><span>Alış maliyeti</span><b>${TL(h.maliyet)}</b></div>
+      ${h.fark?`<div class="row sp"><span>Profilo fiyat farkı</span><b class="pos">−${TL(h.fark)}</b></div>`:""}${h.aile?`<div class="row sp"><span>Aile Bakanlığı farkı</span><b class="pos">−${TL(h.aile)}</b></div>`:""}
+      <div class="row sp"><span>Net maliyet</span><b>${TL(h.net)}</b></div><hr>
+      <div class="row sp"><span>Satış</span><b>${TL(h.tutar)}</b></div><div class="row sp"><span>Net maliyet</span><b>−${TL(h.net)}</b></div><div class="row sp"><span>Komisyon</span><b>−${TL(h.kom)}</b></div>${h.gider?`<div class="row sp"><span>Ek gider</span><b>−${TL(h.gider)}</b></div>`:""}
       <div class="row sp" style="margin-top:4px"><span class="big">Kâr</span><span class="big ${h.kar<0?"neg":"pos"}">${TL(h.kar)}</span></div>
       <div class="row sp"><span>Prim düşünce kâr</span><b class="${h.karPrimli<0?"neg":"pos"}">${TL(h.karPrimli)}</b></div>
       <div class="muted">Maliyete göre %${h.oran.toFixed(1)} · yıl sonu primi ${TL(h.prim)}</div></div>`; };
@@ -1479,8 +1482,8 @@ function sepetAc(){
     main.innerHTML = (`<div class="row sp" style="margin:0 2px 2px"><b>${us.length} ürün</b><span class="muted">Fiyatları kontrol edip müşteri ve ödemeyi girin</span></div>
       ${H.map(([u,h])=>{ const p = P(u.pid), a = aileFark(p.model); return `<div class="satir">
         <div class="row sp"><div><b>${esc(pBas(p))}</b><div class="muted">${esc(pAlt(p))}</div></div><button class="mini" data-sc="${u.id}" style="flex:0 0 auto">Çıkar</button></div>
-        <div class="muted">${u.alis?`Maliyet ${TL(maliyet(u))}`:`<span class="neg">Maliyet bilinmiyor${u.stoksuz?" (stoksuz)":""}</span>`}${u.seri?" · seri "+esc(u.seri):""}${kmpAd[u.id]?` · <span class="pos">${esc(kmpAd[u.id].ad)} +${TL(payi[u.id])}</span>`:""}${h.fark?` · <span class="pos">fiyat farkı +${TL(h.fark)}</span>`:""}</div>
-        <div class="row"><div><label>Satış fiyatı (KDV dahil)</label><input data-sf="${u.id}" inputmode="decimal" value="${virgul(fiyat[u.id])}"></div><div style="flex:0 0 auto;text-align:right"><label>Kâr</label>${u.alis?`<b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b>`:`<span class="muted">—</span>`}</div></div>
+        ${u.alis?`<div class="row sp" style="margin-top:4px"><span>Net maliyet</span><b>${TL(h.net)}</b></div><div class="muted">Alış ${TL(h.maliyet)}${h.kampPrim?` − <span class="pos">${esc(kmpAd[u.id].ad)} ${TL(h.kampPrim)}</span>`:""}${h.fark?` − <span class="pos">fiyat farkı ${TL(h.fark)}</span>`:""}${h.aile?` − <span class="pos">Aile Bakanlığı ${TL(h.aile)}</span>`:""}${u.seri?" · seri "+esc(u.seri):""}</div>`:`<div class="muted"><span class="neg">Maliyet bilinmiyor${u.stoksuz?" (stoksuz)":""}</span>${u.seri?" · seri "+esc(u.seri):""}</div>`}
+        <div class="row"><div><label>Satış fiyatı (KDV dahil)</label><input data-sf="${u.id}" inputmode="decimal" value="${virgul(fiyat[u.id])}"></div><div style="flex:0 0 auto;text-align:right"><label>Kâr</label>${u.alis?`<b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b>${h.kom||h.gider?`<div class="muted" style="font-size:12px">komisyon${h.gider?" + gider":""} −${TL(r2(h.kom+h.gider))}</div>`:""}`:`<span class="muted">—</span>`}</div></div>
         ${a?`<label style="display:flex;gap:8px;align-items:center;margin:4px 0 0"><input type="checkbox" data-aile="${u.id}" ${st.aile.has(u.id)?"checked":""} style="width:auto"> Aile Bakanlığı +${TL(a)}</label>`:""}</div>`; }).join("")}
       ${st.yeni ? `<div class="satir" style="background:var(--brand2)"><b>Stokta olmayan ürün</b>
           <div class="row"><div style="flex:0 0 38%"><label>Marka</label><input id="ysMarka" list="markalar2" placeholder="Altus, Tecna…"></div><div><label>Ürün / model</label><input id="ysAd" placeholder="ör. AL KM 1160 çamaşır"></div></div>
