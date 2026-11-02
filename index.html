@@ -172,7 +172,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v28 · 01.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v29 · 02.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"", apiKey:"" } });
 let db;
 function load(){
@@ -661,7 +661,11 @@ function gruplu(l, tarihF, tutarF, satirF, birim){
   return [...g].map(([k,xs])=>`<div class="gunbas"><span>${tum ? ayAdi(k) : trDate(k)+" · "+gunAdi(k)}</span><span>${xs.length} ${birim} · ${TL(r2(xs.reduce((a,x)=>a+tutarF(x),0)))}</span></div><div class="card list">${xs.map(satirF).join("")}</div>`).join("");
 }
 function vKar(){
-  const sat = db.units.filter(u=>u.satis && donemde(u.satis)).sort((a,b)=>b.satis.tarih.localeCompare(a.satis.tarih));
+  const prf = u => trk(P(u.pid)?.marka||"")==="profilo", km = durum.km||"";
+  const tum = db.units.filter(u=>u.satis && donemde(u.satis)).sort((a,b)=>b.satis.tarih.localeCompare(a.satis.tarih));
+  const mk = {profilo:{ad:"Profilo",n:0,ciro:0,kar:0,karP:0,yok:0}, diger:{ad:"Diğer markalar",n:0,ciro:0,kar:0,karP:0,yok:0}};
+  tum.forEach(u=>{ const v = mk[prf(u)?"profilo":"diger"], h = satisKar(u); v.n++; v.ciro+=h.tutar; if (u.alis) { v.kar+=h.kar; v.karP+=h.karPrimli; } else v.yok++; });
+  const sat = km ? tum.filter(u=>prf(u)===(km==="profilo")) : tum;
   const H = sat.map(u=>[u,satisKar(u)]), KARLI = new Set(["kar","karPrimli","maliyet"]), T = k => r2(H.reduce((a,[u,h])=>a+(KARLI.has(k) && !u.alis ? 0 : h[k]),0)), bilinmeyen = H.filter(([u])=>!u.alis).length;
   const sb = {}; H.forEach(([u,h])=>{ const k = u.satis.sube || "Şube seçilmemiş"; sb[k] ||= {n:0,ciro:0,kar:0}; sb[k].n++; sb[k].ciro+=h.tutar; if (u.alis) sb[k].kar+=h.kar; });
   const kat = {}; H.forEach(([u,h])=>{ const k=(P(u.pid)?.kategori)||"Diğer"; kat[k] ||= {n:0,kar:0,karP:0}; kat[k].n++; if (u.alis) { kat[k].kar+=h.kar; kat[k].karP+=h.karPrimli; } });
@@ -669,8 +673,10 @@ function vKar(){
   main.innerHTML = faturaKontrolKart() + `<button class="b2" id="defterXls" style="width:100%;margin-bottom:10px">📒 Satış defterini Excel’e aktar</button>
     ${bilinmeyen?`<div class="card" style="background:var(--warnbg)"><b>${bilinmeyen} satışın maliyeti bilinmiyor</b><div class="muted">Bunlar ciroya girer, kâra girmez (stoksuz satışlar).</div></div>`:""}
     ${donemSecHtml()}
+    ${mk.profilo.n && mk.diger.n || km ? `<div class="donem">${[["","Tüm markalar"],["profilo","Profilo"],["diger","Diğer markalar"]].map(([k,a])=>`<button class="${km===k?"on":""}" data-km="${k}">${a}</button>`).join("")}</div>
+    <div class="card"><table><tr><th>Marka</th><th>Adet</th><th style="text-align:right">Ciro</th><th style="text-align:right">Kâr / zarar</th></tr>${Object.entries(mk).filter(([,v])=>v.n).map(([k,v])=>`<tr class="tap" data-km="${km===k?"":k}"><td>${km===k?"<b>"+v.ad+"</b>":v.ad}</td><td>${v.n}</td><td style="text-align:right;white-space:nowrap">${TL(v.ciro)}</td><td style="text-align:right;white-space:nowrap">${v.yok===v.n?'<span class="muted">maliyet yok</span>':karTL(r2(v.karP))}${k==="profilo"&&v.karP!==v.kar?`<div class="muted">prim hariç ${TL(r2(v.kar))}</div>`:""}${v.yok&&v.yok<v.n?`<div class="muted">${v.yok} satışta maliyet yok</div>`:""}</td></tr>`).join("")}</table></div>` : ""}
     <div class="stat" style="margin-top:6px">
-      <div class="card"><div class="muted">Net kâr</div><div class="big ${T("kar")<0?"neg":"pos"}">${TL(T("kar"))}</div></div>
+      <div class="card"><div class="muted">Net kâr${km?" · "+mk[km].ad:""}</div><div class="big ${T("kar")<0?"neg":"pos"}">${TL(T("kar"))}</div></div>
       <div class="card"><div class="muted">Prim düşünce kâr</div><div class="big pos">${TL(T("karPrimli"))}</div></div>
       <div class="card"><div class="muted">Satılan cihaz</div><b class="big">${sat.length}</b></div>
       <div class="card"><div class="muted">Ciro</div><b>${TL(T("tutar"))}</b></div>
@@ -686,6 +692,7 @@ function vKar(){
     ${sat.length?gruplu(H, ([u])=>u.satis.tarih, ([u])=>u.satis.tutar, ([u,h])=>`<div class="it tap" data-p="${u.pid}"><div class="row sp"><div><b>${esc(pAd(P(u.pid)))}</b><div class="muted">seri ${esc(u.seri||"—")} · ${ODEME[u.satis.odeme]||""}${u.satis.sube?" · "+esc(u.satis.sube):""}</div></div><div class="sag">${u.alis?`<b class="${h.kar<0?"neg":"pos"}">${TL(h.kar)}</b>`:'<span class="muted">maliyet yok</span>'}<div class="muted">${TL(u.satis.tutar)}</div></div></div></div>`, "cihaz"):`<div class="empty">Bu dönemde satış yok.</div>`}
     <div class="muted" style="margin-top:8px">Tüm tutarlar KDV dahil. Kâr = satış − maliyet − komisyon − ek gider + kampanya primi + fiyat farkı. Primli kâr, cihazın yıl sonu primini de ekler.</div>`;
   donemBagla(vKar);
+  main.querySelectorAll("[data-km]").forEach(b=>b.onclick=()=>{ durum.km = b.dataset.km; vKar(); });
   $("#defterXls").onclick=satisDefteriIndir; faturaKontrolBagla();
   if ($("#alacakAc")) $("#alacakAc").onclick=alacakDefteri;
   main.querySelectorAll("[data-p]").forEach(d=>d.onclick=()=>urunDetay(d.dataset.p));
