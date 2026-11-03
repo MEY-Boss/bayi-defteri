@@ -172,7 +172,7 @@ body.sepetli main{padding-bottom:calc(156px + env(safe-area-inset-bottom))}
 /* Bütün tutarlar KDV dahildir. Kâr = satış − maliyet − komisyon − ek gider (hepsi KDV dahil).
    Yıl sonu primi: alış fiyatı × prim %; "primli maliyet" = maliyet − prim. */
 const KEY = "bayiDefteri.v1";
-const SURUM = "v29 · 02.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
+const SURUM = "v30 · 03.11.2026"; // yayınlanan her güncellemede artır (sw.js önbellek adıyla birlikte)
 const BOS = () => ({ v:2, products:[], units:[], settings:{ marj:15, prim:6, kom:{ nakit:0, havale:0, kart:2.5, taksit:6 }, taksit:{ 2:3, 3:4.5, 6:8, 9:11, 12:14.5 }, taksitOrnek:true, banka:"elle", firma:"", apiKey:"" } });
 let db;
 function load(){
@@ -215,6 +215,7 @@ function num(v){
   let s = String(v??"").replace(/[₺\s]|TL/gi,"");
   if (!s) return 0;
   if (s.includes(",") && s.includes(".")) s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g,"").replace(",",".") : s.replace(/,/g,"");
+  else if ((s.match(/,/g)||[]).length>1) s = /,\d{1,2}$/.test(s) ? s.replace(/,(?=.*,)/g,"").replace(",",".") : s.replace(/,/g,""); // "6,750,00" → 6750
   else if (s.includes(",")) s = s.replace(",",".");
   else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,"");
   const n = parseFloat(s); return isNaN(n) ? 0 : n;
@@ -1148,10 +1149,12 @@ async function docxBloklar(f){
 }
 function kampanyaKural(baslik, ad, aciklama){
   const b = (baslik+" "+ad).toLocaleLowerCase("tr"), t = (baslik+" "+ad+" "+aciklama).toLocaleLowerCase("tr");
+  const xlDahil = /\bxx?l\b[^.]*dahil edil/.test(t); // Kasım 2026: "XL ve XXL modeller de dahil edilmiştir"
   if (/kurutma/.test(t) && /çamaşır/.test(t)) return { gruplar:[{ ad:"Kurutma makinesi", kat:["Kurutma makinesi"], modeller:[], adet:1 }, { ad:"Çamaşır makinesi", kat:["Çamaşır makinesi"], modeller:[], adet:1 }], haricXL:false };
+  if (/kurutma/.test(b)) return { gruplar:[{ ad:"Kurutma makinesi", kat:["Kurutma makinesi"], modeller:[], adet:1 }, { ad:"Seçili beyaz eşya", kat:LDA.filter(k=>k!=="Kurutma makinesi"), modeller:[], adet:1 }], haricXL:false, haricSon:["55","56"] }; // MEY 03.11: Kasım'da numarası 55/56 ile biten buzdolapları girmez
   if (/televizyon|\btv\b/.test(b)) return { gruplar:[{ ad:"Televizyon", kat:[], modeller:[], adet:1 }, { ad:"Hediye Türk kahve makinesi", kat:[], modeller:[], adet:1 }], haricXL:false };
   if (/ankastre|\bset\b/.test(b)) return { gruplar:[{ ad:"Fırın", kat:["Fırın"], modeller:[], adet:1 }, { ad:"Ocak / davlumbaz", kat:["Ocak","Davlumbaz"], modeller:[], adet:1, enFazla:2 }], haricXL:false };
-  return { gruplar:[{ ad:"Beyaz eşya", kat:LDA, modeller:[], adet:2 }], haricXL:/\bxx?l\b/.test(t), haricSon:["76","86"] }; // MEY 30.10: numarası 76/86 ile biten buzdolapları bundle'a girmez
+  return { gruplar:[{ ad:"Beyaz eşya", kat:LDA, modeller:[], adet:2 }], haricXL:/\bxx?l\b/.test(t) && !xlDahil, haricSon: xlDahil ? [] : ["76","86"] }; // MEY 30.10: numarası 76/86 ile biten buzdolapları bundle'a girmez
 }
 const MODEL_KOD = /^[A-ZÇĞİÖŞÜ]{2,}[A-Z0-9]*\d[A-Z0-9]*$/;
 function kampanyaCoz(bl){
